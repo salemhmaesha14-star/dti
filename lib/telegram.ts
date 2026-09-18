@@ -31,8 +31,13 @@ export async function sendTelegramNotification(
   message: string,
   options?: { chatId?: string; enabled?: boolean; skipValidation?: boolean }
 ) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN || '8672071352:AAHn63d112hNq29pRd8NTsR8eEs5OA_KPlA';
+  const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const targetChatId = options?.chatId || process.env.TELEGRAM_CHAT_ID || '7259761374';
+
+  if (!botToken) {
+    console.error('Telegram notification skipped: TELEGRAM_BOT_TOKEN is not configured.');
+    return { ok: false, status: 'missing_bot_token' };
+  }
 
   if (!options?.skipValidation && (options?.enabled === false || !targetChatId || String(targetChatId).trim() === '')) {
     return { ok: false, status: 'disabled_or_missing_chat_id' };

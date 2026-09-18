@@ -10,7 +10,12 @@ export async function POST(request: Request) {
     const chatId = body?.message?.chat?.id;
     const text = body?.message?.text;
 
-    const token = process.env.TELEGRAM_BOT_TOKEN || '8672071352:AAHn63d112hNq29pRd8NTsR8eEs5OA_KPlA';
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+
+    if (!token) {
+      console.error('Telegram webhook rejected: TELEGRAM_BOT_TOKEN is not configured.');
+      return NextResponse.json({ ok: false, error: 'Telegram bot token is not configured' }, { status: 500 });
+    }
 
     if (chatId) {
       const responseText = text === '/start' 
