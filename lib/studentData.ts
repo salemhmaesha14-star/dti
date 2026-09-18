@@ -371,7 +371,7 @@ export const recordAttendance = async (student: Partial<StudentRow>, course: str
     'السنه الدراسية': normalizeText(getRecordValue(student as Record<string, unknown>, fieldAliases.year)),
   };
 
-  const attendanceTables = ['attendance', 'الحضور', 'حضور'];
+  const attendanceTables = ['الحضور', 'حضور'];
   for (const tableName of attendanceTables) {
     try {
       const { error } = await supabase.from(tableName).insert([payload]);
@@ -418,7 +418,7 @@ export const updateWarningById = async (warningId: string | number, updates: Rec
   const idString = String(warningId ?? '').trim();
   if (!idString) return { success: false, error: 'missing-warning-id' };
 
-  const tableNames = ['الإنذارات', 'warnings', 'warning'];
+  const tableNames = ['الإنذارات', 'إنذارات'];
 
   for (const tableName of tableNames) {
     const { data, error } = await supabase.from(tableName).select('*');
@@ -450,7 +450,7 @@ export const deleteWarningById = async (warningId: string | number) => {
   const idString = String(warningId ?? '').trim();
   if (!idString) return { success: false, error: 'missing-warning-id' };
 
-  const tableNames = ['الإنذارات', 'warnings', 'warning'];
+  const tableNames = ['الإنذارات', 'إنذارات'];
 
   for (const tableName of tableNames) {
     const { data, error } = await supabase.from(tableName).select('*');

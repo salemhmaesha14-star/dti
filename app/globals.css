@@ -13,6 +13,230 @@
   --light-bg: #f5f7fa;
   --border-color: #e2e8e0;
   --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.12);
+  --page-bg: linear-gradient(135deg, #f5f7fa 0%, #e6e9e0 100%);
+  --page-surface: rgba(255, 255, 255, 0.96);
+  --page-surface-soft: #f8faf8;
+  --page-surface-strong: #ffffff;
+  --page-text: #2c3e50;
+  --page-text-soft: #555;
+  --page-text-muted: #6b7280;
+  --page-border: #e2e8e0;
+  --page-card: #ffffff;
+  --page-card-alt: #f8fafc;
+  --page-shadow: rgba(22, 39, 35, 0.12);
+  --logo-glow: rgba(47, 63, 58, 0.12);
+  --login-overlay: rgba(15, 32, 29, 0.42);
+}
+
+/* Student dashboard refresh */
+.student-dashboard-container {
+  width: min(1180px, 100%);
+  padding: 24px clamp(16px, 3vw, 34px) 34px;
+}
+
+.student-identity-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto 18px;
+  padding: 26px 20px 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  background: linear-gradient(135deg, var(--page-card-alt), var(--page-card));
+  box-shadow: 0 16px 40px rgba(24, 58, 49, 0.1);
+}
+
+.student-identity-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: linear-gradient(90deg, var(--accent-color), var(--primary-color));
+}
+
+.student-identity-hero .institute-logo {
+  width: 132px;
+  margin-bottom: 14px;
+  border-radius: 22px;
+}
+
+.student-identity-hero .student-brand-text h2 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+}
+
+.student-identity-hero .student-brand-text h3 {
+  margin: 7px 0 0;
+  font-size: 1rem;
+  color: var(--page-text-soft);
+}
+
+.student-qr-section {
+  margin: -8px 0 16px;
+}
+
+.student-qr-card {
+  width: min(100%, 250px);
+  padding: 14px 16px 12px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--primary-color) 22%, var(--border-color));
+  box-shadow: 0 12px 28px rgba(24, 58, 49, 0.1);
+}
+
+.student-qr-card .qr-image {
+  width: min(100%, 178px);
+  padding: 8px;
+}
+
+.student-dashboard-title {
+  margin: 18px 0 14px;
+}
+
+.student-dashboard-title h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.student-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: initial;
+  padding: 14px;
+  background: var(--page-card-alt);
+  border-radius: 18px;
+}
+
+.student-profile-grid .info-item {
+  min-width: 0;
+  min-height: 48px;
+  padding: 11px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--page-card);
+  color: var(--page-text);
+}
+
+.student-profile-grid .info-label {
+  color: var(--page-text-soft);
+  font-size: 0.82rem;
+}
+
+.student-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.student-quick-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 76px;
+  padding: 14px 17px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--page-card);
+  box-shadow: 0 8px 20px rgba(24, 58, 49, 0.06);
+}
+
+.student-quick-stat-value {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--primary-color);
+}
+
+.student-quick-stat-label {
+  color: var(--page-text-soft);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.student-quick-stat.present { border-inline-start: 4px solid #2f8f68; }
+.student-quick-stat.absent { border-inline-start: 4px solid #c85b5b; }
+.student-quick-stat.waiting { border-inline-start: 4px solid #c28a3e; }
+
+.student-extra-details {
+  margin-top: 18px;
+  background: var(--page-card-alt);
+  border-radius: 18px;
+}
+
+.student-extra-details .detail-item {
+  border: 1px solid var(--border-color);
+  background: var(--page-card);
+  box-shadow: none;
+}
+
+.student-dashboard-container .tabs-container {
+  margin-top: 22px;
+}
+
+.student-dashboard-container .tabs {
+  padding: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--page-card-alt);
+}
+
+.student-dashboard-container .tab {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--page-text-soft);
+}
+
+.student-dashboard-container .tab.active {
+  background: var(--primary-color);
+  box-shadow: 0 6px 14px rgba(24, 58, 49, 0.16);
+}
+
+.student-dashboard-container .tab-content {
+  border-radius: 16px;
+  background: var(--page-card-alt);
+}
+
+@media (max-width: 760px) {
+  .student-profile-grid,
+  .student-quick-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .student-quick-stat {
+    min-height: 64px;
+  }
+
+  .student-dashboard-container {
+    padding-top: 14px;
+  }
+}
+
+html[data-theme='dark'] {
+  --primary-color: #d9c275;
+  --secondary-color: #f2d98a;
+  --accent-color: #c4b78a;
+  --error-color: #ff6b6b;
+  --success-color: #66bb6a;
+  --text-dark: #f3f4f6;
+  --text-light: #0f172a;
+  --light-bg: #0b1220;
+  --border-color: rgba(148, 163, 184, 0.26);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.38);
+  --page-bg: linear-gradient(135deg, #0b1220 0%, #111827 100%);
+  --page-surface: rgba(17, 24, 39, 0.92);
+  --page-surface-soft: #111827;
+  --page-surface-strong: #0f172a;
+  --page-text: #f8fafc;
+  --page-text-soft: #d7dfe8;
+  --page-text-muted: #a8b3bf;
+  --page-border: rgba(148, 163, 184, 0.2);
+  --page-card: #111827;
+  --page-card-alt: #0f172a;
+  --page-shadow: rgba(2, 6, 23, 0.55);
+  --logo-glow: rgba(255, 255, 255, 0.08);
+  --login-overlay: rgba(2, 6, 23, 0.62);
 }
 
 * {
@@ -28,10 +252,384 @@ html {
 body {
   margin: 0;
   font-family: var(--font-cairo), Tahoma, 'Segoe UI', Arial, sans-serif;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e6e9e0 100%);
-  color: var(--text-dark);
+  background: var(--page-bg);
+  color: var(--page-text);
   min-height: 100vh;
   direction: rtl;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.theme-toggle-wrap {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 50;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #2196f3;
+  transition: 0.4s;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.sun-moon {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: yellow;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: black;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196f3;
+}
+
+input:checked + .slider .sun-moon {
+  transform: translateX(26px);
+  background-color: white;
+  animation: rotate-center 0.6s ease-in-out both;
+}
+
+.moon-dot {
+  opacity: 0;
+  transition: 0.4s;
+  fill: gray;
+}
+
+input:checked + .slider .sun-moon .moon-dot {
+  opacity: 1;
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+#moon-dot-1 {
+  left: 10px;
+  top: 3px;
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  z-index: 4;
+}
+
+#moon-dot-2 {
+  left: 2px;
+  top: 10px;
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  z-index: 4;
+}
+
+#moon-dot-3 {
+  left: 16px;
+  top: 18px;
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  z-index: 4;
+}
+
+#light-ray-1,
+#light-ray-2,
+#light-ray-3 {
+  position: absolute;
+  width: 43px;
+  height: 43px;
+  z-index: -1;
+  fill: white;
+  opacity: 10%;
+}
+
+#light-ray-1 { left: -8px; top: -8px; }
+#light-ray-2 { left: -24px; top: -20px; width: 55px; height: 55px; }
+#light-ray-3 { left: -18px; top: -18px; width: 60px; height: 60px; }
+
+.cloud-light,
+.cloud-dark {
+  position: absolute;
+  fill: #eee;
+  animation: cloud-move 6s infinite;
+}
+
+.cloud-dark {
+  fill: #ccc;
+  animation-delay: 1s;
+}
+
+#cloud-1 { left: 30px; top: 15px; width: 40px; }
+#cloud-2 { left: 44px; top: 10px; width: 20px; }
+#cloud-3 { left: 18px; top: 24px; width: 30px; }
+
+.stars {
+  transform: translateY(-32px);
+  opacity: 0;
+  transition: 0.4s;
+}
+
+.star {
+  fill: white;
+  position: absolute;
+  transition: 0.4s;
+  animation: star-twinkle 2s infinite;
+}
+
+input:checked + .slider .stars {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+#star-1 { width: 20px; top: 2px; left: 3px; animation-delay: 0.3s; }
+#star-2 { width: 6px; top: 16px; left: 3px; }
+#star-3 { width: 12px; top: 20px; left: 10px; animation-delay: 0.6s; }
+#star-4 { width: 18px; top: 0px; left: 18px; animation-delay: 1.3s; }
+
+@keyframes cloud-move {
+  0% { transform: translateX(0px); }
+  40% { transform: translateX(4px); }
+  80% { transform: translateX(-4px); }
+  100% { transform: translateX(0px); }
+}
+
+@keyframes star-twinkle {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.2); }
+  80% { transform: scale(0.8); }
+  100% { transform: scale(1); }
+}
+
+@keyframes rotate-center {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+html[data-theme='dark'] body,
+html[data-theme='dark'] .student-shell,
+html[data-theme='dark'] .student-page,
+html[data-theme='dark'] .container,
+html[data-theme='dark'] .attendance-page,
+html[data-theme='dark'] .attendance-shell,
+html[data-theme='dark'] .login-shell {
+  background: var(--page-bg);
+  color: var(--page-text);
+}
+
+html[data-theme='dark'] .student-info,
+html[data-theme='dark'] .student-details-grid,
+html[data-theme='dark'] .tab-content,
+html[data-theme='dark'] .status-card,
+html[data-theme='dark'] .attendance-box,
+html[data-theme='dark'] .register-panel,
+html[data-theme='dark'] .students-table-panel,
+html[data-theme='dark'] .admin-dashboard-panel,
+html[data-theme='dark'] .student-management-panel,
+html[data-theme='dark'] .admin-student-detail,
+html[data-theme='dark'] .admin-table-section,
+html[data-theme='dark'] .supervisor-feature-panel,
+html[data-theme='dark'] .panel,
+html[data-theme='dark'] .attendance-header,
+html[data-theme='dark'] .attendance-title,
+html[data-theme='dark'] .student-management-toolbar,
+html[data-theme='dark'] .student-form-grid,
+html[data-theme='dark'] .admin-supervisor-section,
+html[data-theme='dark'] .admin-filter-grid,
+html[data-theme='dark'] .admin-supervisor-item,
+html[data-theme='dark'] .admin-record-item,
+html[data-theme='dark'] .student-management-card,
+html[data-theme='dark'] .schedule-card,
+html[data-theme='dark'] .warning-item,
+html[data-theme='dark'] .attendance-row,
+html[data-theme='dark'] .attendance-list,
+html[data-theme='dark'] .barcode-box,
+html[data-theme='dark'] .detail-item,
+html[data-theme='dark'] .login-card,
+html[data-theme='dark'] .login-help,
+html[data-theme='dark'] .login-footer .admin-link,
+html[data-theme='dark'] .student-class-manager {
+  background: var(--page-surface);
+  color: var(--page-text);
+  border-color: var(--page-border);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+}
+
+html[data-theme='dark'] .detail-item,
+html[data-theme='dark'] .student-management-card,
+html[data-theme='dark'] .attendance-row,
+html[data-theme='dark'] .schedule-card,
+html[data-theme='dark'] .warning-item,
+html[data-theme='dark'] .admin-record-item,
+html[data-theme='dark'] .admin-supervisor-item,
+html[data-theme='dark'] .student-class-manager,
+html[data-theme='dark'] .panel,
+html[data-theme='dark'] .login-card,
+html[data-theme='dark'] .student-info,
+html[data-theme='dark'] .status-card,
+html[data-theme='dark'] .tab-content,
+html[data-theme='dark'] .register-panel,
+html[data-theme='dark'] .students-table-panel,
+html[data-theme='dark'] .attendance-box,
+html[data-theme='dark'] .student-form-grid,
+html[data-theme='dark'] .student-management-toolbar,
+html[data-theme='dark'] .admin-filter-grid,
+html[data-theme='dark'] .admin-supervisor-section,
+html[data-theme='dark'] .admin-student-detail,
+html[data-theme='dark'] .admin-table-section,
+html[data-theme='dark'] .supervisor-feature-panel {
+  backdrop-filter: blur(8px);
+}
+
+html[data-theme='dark'] .info-item,
+html[data-theme='dark'] .detail-value,
+html[data-theme='dark'] .status-title,
+html[data-theme='dark'] .warning-reason,
+html[data-theme='dark'] .schedule-text,
+html[data-theme='dark'] .admin-record-item,
+html[data-theme='dark'] .student-management-card-body,
+html[data-theme='dark'] .admin-supervisor-item span,
+html[data-theme='dark'] .md-text,
+html[data-theme='dark'] .attendance-header p,
+html[data-theme='dark'] .login-help,
+html[data-theme='dark'] .login-help strong,
+html[data-theme='dark'] .login-title,
+html[data-theme='dark'] .login-institute-header h2,
+html[data-theme='dark'] .login-institute-header h3,
+html[data-theme='dark'] .system-notice,
+html[data-theme='dark'] .label,
+html[data-theme='dark'] .field-label,
+html[data-theme='dark'] .student-management-header p,
+html[data-theme='dark'] .admin-dashboard-heading p,
+html[data-theme='dark'] .feature-panel-heading p,
+html[data-theme='dark'] .attendance-header h1,
+html[data-theme='dark'] .student-brand-text h2,
+html[data-theme='dark'] .student-brand-text h3 {
+  color: var(--page-text);
+}
+
+html[data-theme='dark'] .info-label,
+html[data-theme='dark'] .detail-label,
+html[data-theme='dark'] .status-data,
+html[data-theme='dark'] .tab.active,
+html[data-theme='dark'] .header h1,
+html[data-theme='dark'] .barcode-name,
+html[data-theme='dark'] .warning-header strong,
+html[data-theme='dark'] .admin-section-heading h2,
+html[data-theme='dark'] .admin-dashboard-heading h1,
+html[data-theme='dark'] .student-management-header h1,
+html[data-theme='dark'] .feature-panel-heading h1,
+html[data-theme='dark'] .admin-student-detail h2,
+html[data-theme='dark'] .admin-table-section h2,
+html[data-theme='dark'] .student-management-card-header strong,
+html[data-theme='dark'] .student-management-badge,
+html[data-theme='dark'] .average-title,
+html[data-theme='dark'] .average-value,
+html[data-theme='dark'] .percentage-value,
+html[data-theme='dark'] .status-data,
+html[data-theme='dark'] .attendance-title {
+  color: var(--primary-color);
+}
+
+html[data-theme='dark'] table,
+html[data-theme='dark'] th,
+html[data-theme='dark'] td,
+html[data-theme='dark'] .tab,
+html[data-theme='dark'] .btn,
+html[data-theme='dark'] .admin-view-tabs button,
+html[data-theme='dark'] .admin-record-actions button,
+html[data-theme='dark'] .student-management-toolbar input,
+html[data-theme='dark'] .student-management-toolbar select,
+html[data-theme='dark'] .student-form-grid input,
+html[data-theme='dark'] .student-form-grid select,
+html[data-theme='dark'] .student-form-grid textarea,
+html[data-theme='dark'] .admin-filter-grid input,
+html[data-theme='dark'] .admin-filter-grid select,
+html[data-theme='dark'] .admin-supervisor-form input,
+html[data-theme='dark'] .admin-supervisor-form select,
+html[data-theme='dark'] .admin-student-picker select,
+html[data-theme='dark'] .login-form input,
+html[data-theme='dark'] .register-form input,
+html[data-theme='dark'] .register-form select,
+html[data-theme='dark'] .field-group input,
+html[data-theme='dark'] .field-group select,
+html[data-theme='dark'] .field-group textarea {
+  background: #0f172a;
+  color: var(--page-text);
+  border-color: var(--page-border);
+}
+
+html[data-theme='dark'] .logout-button,
+html[data-theme='dark'] .back-link,
+html[data-theme='dark'] .admin-link,
+html[data-theme='dark'] .btn,
+html[data-theme='dark'] .toggle-password,
+html[data-theme='dark'] .login-button,
+html[data-theme='dark'] .student-management-actions button {
+  background: rgba(15, 23, 42, 0.92);
+  color: var(--page-text);
+  border-color: var(--page-border);
+}
+
+html[data-theme='dark'] .warning-item {
+  background: rgba(127, 29, 29, 0.18);
+}
+
+html[data-theme='dark'] .tab {
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--page-text);
+}
+
+html[data-theme='dark'] .tab-content.active,
+html[data-theme='dark'] .no-data {
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--page-text);
+}
+
+html[data-theme='dark'] .login-shell::before,
+html[data-theme='dark'] .login-shell::after,
+html[data-theme='dark'] .system-notice {
+  opacity: 0.9;
+}
+
+button,
+input,
+textarea,
+select,
+h1,
+h2,
+h3,
+p,
+span,
+div,
+a {
+  font-family: var(--font-cairo), Tahoma, 'Segoe UI', Arial, sans-serif;
 }
 
 button,
@@ -596,14 +1194,39 @@ a {
   gap: 16px;
 }
 
+.student-footer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+  padding-bottom: 18px;
+}
+
 .logout-button {
   border: none;
-  background: #f1efe8;
+  background: linear-gradient(135deg, #f1efe8, #e7e1d1);
   color: var(--secondary-color);
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-radius: 12px;
+  padding: 12px 22px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.logout-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
+}
+
+.student-brand-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: 8px auto 18px;
+  padding: 18px 16px 14px;
+  width: 100%;
 }
 
 .institute-header {
@@ -615,21 +1238,25 @@ a {
 }
 
 .institute-logo {
-  width: 120px;
+  width: 160px;
   height: auto;
-  border-radius: 12px;
+  border-radius: 16px;
   margin-bottom: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: block;
+  margin-inline: auto;
 }
 
-.institute-header h2 {
+.institute-header h2,
+.student-brand-text h2 {
   color: var(--primary-color);
   font-size: 26px;
   font-weight: 700;
   margin: 6px 0;
 }
 
-.institute-header h3 {
+.institute-header h3,
+.student-brand-text h3 {
   color: #555;
   font-size: 20px;
   font-weight: 500;
@@ -638,23 +1265,46 @@ a {
 .barcode-section {
   display: flex;
   justify-content: center;
+  align-items: center;
   margin: 20px 0 8px;
+  width: 100%;
 }
 
 .barcode-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  background: #f9f9f9;
-  border: 1px dashed #ddd;
-  border-radius: 12px;
+  background: var(--page-card-alt);
+  border: 1px dashed var(--border-color);
+  border-radius: 18px;
   padding: 18px 20px 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  width: min(100%, 320px);
+  margin: 0 auto;
+  transform: none;
+  rotate: 0deg;
 }
 
 .barcode-svg {
   display: block;
-  width: min(100%, 340px);
+  width: min(100%, 220px);
   height: auto;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
+  padding: 10px;
+  margin: 0 auto;
+}
+
+.qr-box {
+  width: min(100%, 320px);
+}
+
+.qr-image {
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 
 .barcode-name {
@@ -665,7 +1315,7 @@ a {
 
 .barcode-id {
   margin-top: 4px;
-  color: #666;
+  color: var(--page-text-soft);
   font-size: 12px;
 }
 
@@ -1474,6 +2124,18 @@ tr:nth-child(even) td {
   background: #fbfdfc;
   color: #64746e;
   font-size: 0.88rem;
+}
+
+.admin-record-selectable {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.admin-record-selectable:hover,
+.admin-record-selectable.selected {
+  border-color: #9bc7b7;
+  background: #f1f8f4;
+  box-shadow: 0 6px 16px rgba(55, 106, 92, 0.1);
 }
 
 .admin-record-item strong {

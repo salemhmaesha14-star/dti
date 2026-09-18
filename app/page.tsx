@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { writeAuditLog } from '../lib/auditLog';
 import {
@@ -131,7 +131,7 @@ const extractGrades = (rows: Record<string, unknown>[]): GradeEntry[] => {
 };
 
 const parseAttendance = (rows: Record<string, unknown>[]) => {
-  const summary = { present: 0, absent: 0, waiting: 0 };
+  const summary = { present: 0, absent: 0 };
 
   rows.forEach((row) => {
     const status = getValueByKeys(row, ['الحضور', 'حضور', 'status', 'الحالة', 'attendance']) as string | number | boolean | undefined;
@@ -141,15 +141,12 @@ const parseAttendance = (rows: Record<string, unknown>[]) => {
       summary.present += 1;
     } else if (status === false || normalized === 'غائب' || normalized === 'absent' || normalized === '0' || normalized === 'no') {
       summary.absent += 1;
-    } else {
-      summary.waiting += 1;
     }
   });
 
   return [
     { label: 'حاضر', value: String(summary.present), tone: 'present' },
     { label: 'غائب', value: String(summary.absent), tone: 'absent' },
-    { label: 'منتظر', value: String(summary.waiting), tone: 'waiting' },
   ];
 };
 
@@ -169,7 +166,7 @@ const getTableRows = async (tableNames: string[], select = '*') => {
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('grades');
+  const [activeTab, setActiveTab] = useState<TabKey>('record');
   const [notice, setNotice] = useState('يرجى تسجيل الدخول لعرض نتائجك');
   const [loginData, setLoginData] = useState({ studentId: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -179,7 +176,6 @@ export default function Home() {
   const [attendanceSummary, setAttendanceSummary] = useState([
     { label: 'حاضر', value: '0', tone: 'present' },
     { label: 'غائب', value: '0', tone: 'absent' },
-    { label: 'منتظر', value: '0', tone: 'waiting' },
   ]);
   const [studentStatus, setStudentStatus] = useState<string>('غير متوفر');
   const [classOptions, setClassOptions] = useState<Array<{ name: string; capacity: number | null; occupied: number; available: number | null }>>([]);
@@ -356,6 +352,7 @@ export default function Home() {
 
         setLoggedStudent(restoredStudent);
         setTelegramNotificationsEnabled(restoredPreference);
+        setActiveTab('record');
         setIsLoggedIn(true);
         setNotice('تمت استعادة جلسة الطالب.');
       }
@@ -376,12 +373,12 @@ export default function Home() {
     }
   }, [loggedStudent]);
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      if (!loggedStudent || !loggedStudent['الرقم الجامعي']) return;
+  const refreshDashboard = useCallback(async () => {
+    if (!loggedStudent || !loggedStudent['الرقم الجامعي']) return;
 
-      const studentId = String(loggedStudent['الرقم الجامعي']);
+    const studentId = String(loggedStudent['الرقم الجامعي']);
 
+    try {
       const [attendanceResult, warningsResult, gradesResult, statusResult] = await Promise.all([
         getAttendanceForStudent(studentId).then((rows) => ({ data: rows })),
         getWarningsForStudent(studentId).then((rows) => ({ data: rows })),
@@ -403,10 +400,39 @@ export default function Home() {
       const statusData = (statusResult.data[0] as Record<string, unknown> | undefined) ?? (loggedStudent as Record<string, unknown> | null) ?? {};
       const statusValue = getValueByKeys(statusData, ['الحالة', 'status', 'الحالة_الدراسية']) ?? 'غير متوفر';
       setStudentStatus(normalizeText(statusValue));
+    } catch {
+      setNotice('حدث خطأ أثناء تحديث البيانات من قاعدة البيانات');
+    }
+  }, [loggedStudent]);
+
+  useEffect(() => {
+    if (!loggedStudent || !loggedStudent['الرقم الجامعي']) return;
+
+    void refreshDashboard();
+
+    const intervalId = window.setInterval(() => {
+      void refreshDashboard();
+    }, 15000);
+
+    const handleFocus = () => {
+      void refreshDashboard();
     };
 
-    loadDashboard();
-  }, [loggedStudent]);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDashboard();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loggedStudent, refreshDashboard]);
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
@@ -448,6 +474,7 @@ export default function Home() {
 
       setLoggedStudent(hydratedUser);
       setTelegramNotificationsEnabled(preference);
+      setActiveTab('record');
       setIsLoggedIn(true);
       window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(hydratedUser));
       writeAuditLog({
@@ -500,6 +527,28 @@ export default function Home() {
       window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(updatedStudent));
       setNotice(`تم تغيير الفئة بنجاح إلى ${nextClass}`);
       setToast({ message: `تم تغيير الفئة إلى ${nextClass}`, type: 'success' });
+
+      const telegramChatId = getStudentTelegramChatId(loggedStudent);
+      if (telegramNotificationsEnabled && telegramChatId) {
+        const telegramMessage = buildStudentTelegramMessage({
+          studentName: String(loggedStudent?.['اسم الطالب'] ?? 'الطالب'),
+          studentId: String(loggedStudent?.['الرقم الجامعي'] ?? ''),
+          studentYear: String(loggedStudent?.['السنه الدراسية'] ?? 'غير محدد'),
+          studentClass: nextClass,
+          statusText: `تم تغيير الفئة بنجاح من ${currentClass || 'غير محددة'} إلى ${nextClass}.`,
+        });
+        const telegramResult = await sendTelegramNotification(telegramMessage, {
+          chatId: telegramChatId,
+          enabled: true,
+        });
+
+        if (telegramResult?.ok === true) {
+          setNotice(`تم تغيير الفئة إلى ${nextClass} وإرسال إشعار إلى التلجرام.`);
+        } else {
+          setNotice(`تم تغيير الفئة إلى ${nextClass}، لكن تعذر إرسال إشعار التلجرام.`);
+        }
+      }
+
       await refreshClassOptions();
       writeAuditLog({
         action: 'student_class_changed',
@@ -643,54 +692,28 @@ export default function Home() {
   return (
     <main className="student-shell" dir="rtl">
       <div className="student-page">
-        <div className="container" id="mainContainer">
-          <div className="topbar">
-            <div className="institute-header">
-              <img
-                className="institute-logo"
-                src="https://drive.google.com/thumbnail?id=1WBYFxtmLUfuREUY1H5Uso5ltomjshWlq&sz=w1000"
-                alt="شعار المعهد"
-              />
+        <div className="container student-dashboard-container" id="mainContainer">
+          <div className="student-brand-center student-identity-hero">
+            <img
+              className="institute-logo"
+              src="https://drive.google.com/thumbnail?id=1WBYFxtmLUfuREUY1H5Uso5ltomjshWlq&sz=w1000"
+              alt="شعار المعهد"
+            />
+            <div className="student-brand-text">
               <h2>المعهد التقاني لطب الأسنان</h2>
               <h3>جامعة اللاذقية</h3>
             </div>
-            <button className="logout-button" type="button" onClick={logout}>تسجيل الخروج</button>
           </div>
 
-          <div className="barcode-section">
-            <div className="barcode-box">
-              <svg viewBox="0 0 280 90" className="barcode-svg" aria-label="barcode">
-                <rect width="280" height="90" rx="8" fill="#fff" />
-                <g fill="#111827">
-                  <rect x="10" y="20" width="2" height="50" />
-                  <rect x="18" y="20" width="6" height="50" />
-                  <rect x="30" y="20" width="2" height="50" />
-                  <rect x="38" y="20" width="4" height="50" />
-                  <rect x="48" y="20" width="2" height="50" />
-                  <rect x="62" y="20" width="8" height="50" />
-                  <rect x="74" y="20" width="4" height="50" />
-                  <rect x="82" y="20" width="2" height="50" />
-                  <rect x="90" y="20" width="6" height="50" />
-                  <rect x="102" y="20" width="2" height="50" />
-                  <rect x="110" y="20" width="8" height="50" />
-                  <rect x="122" y="20" width="2" height="50" />
-                  <rect x="128" y="20" width="4" height="50" />
-                  <rect x="138" y="20" width="2" height="50" />
-                  <rect x="146" y="20" width="8" height="50" />
-                  <rect x="160" y="20" width="2" height="50" />
-                  <rect x="166" y="20" width="6" height="50" />
-                  <rect x="178" y="20" width="2" height="50" />
-                  <rect x="186" y="20" width="8" height="50" />
-                  <rect x="198" y="20" width="2" height="50" />
-                  <rect x="206" y="20" width="4" height="50" />
-                  <rect x="216" y="20" width="2" height="50" />
-                  <rect x="224" y="20" width="8" height="50" />
-                  <rect x="238" y="20" width="2" height="50" />
-                  <rect x="246" y="20" width="6" height="50" />
-                  <rect x="258" y="20" width="2" height="50" />
-                  <rect x="266" y="20" width="4" height="50" />
-                </g>
-              </svg>
+          <div className="barcode-section student-qr-section">
+            <div className="barcode-box qr-box student-qr-card">
+              <img
+                className="barcode-svg qr-image"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                  `UDTI|${formatStudentValue(loggedStudent?.['اسم الطالب'])}|${formatStudentValue(loggedStudent?.['الرقم الجامعي'])}`
+                )}`}
+                alt="QR code للطالب"
+              />
               <div className="barcode-name">{formatStudentValue(loggedStudent?.['اسم الطالب'])}</div>
               <div className="barcode-id">{formatStudentValue(loggedStudent?.['الرقم الجامعي'])}</div>
             </div>
@@ -698,11 +721,11 @@ export default function Home() {
 
           <div className="system-notice">{notice}</div>
 
-          <div className="header">
+          <div className="header student-dashboard-title">
             <h1>الحساب الجامعي</h1>
           </div>
 
-          <div className="student-info">
+          <div className="student-info student-profile-grid">
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-user" /> الاسم</span> {formatStudentValue(loggedStudent?.['اسم الطالب'])}</div>
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-id-card" /> الرقم الجامعي</span> {formatStudentValue(loggedStudent?.['الرقم الجامعي'])}</div>
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-building-columns" /> القسم</span> {formatStudentValue(loggedStudent?.['القسم'])}</div>
@@ -710,6 +733,15 @@ export default function Home() {
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-users" /> الكنية</span> {formatStudentValue(loggedStudent?.['الكنية'])}</div>
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-layer-group" /> الفئة</span> {formatStudentValue(loggedStudent?.['الفئة'])}</div>
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-check-circle" /> السنة الدراسية</span> {formatStudentValue(loggedStudent?.['السنه الدراسية'])}</div>
+          </div>
+
+          <div className="student-quick-stats" aria-label="ملخص الحضور">
+            {attendanceSummary.map((item) => (
+              <div className={`student-quick-stat ${item.tone}`} key={item.tone}>
+                <span className="student-quick-stat-value">{item.value}</span>
+                <span className="student-quick-stat-label">{item.label}</span>
+              </div>
+            ))}
           </div>
 
           <div className="student-class-manager" style={{ marginTop: 24, padding: '20px 24px', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -766,9 +798,12 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="student-details-grid">
+          <div className="student-details-grid student-extra-details">
             <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
               <div className="detail-label">إعدادات التنبيهات</div>
+              <div style={{ marginBottom: 12, color: '#475569', fontSize: 14, lineHeight: 1.8 }}>
+                فعّل التنبيهات للسماح للمعهد بالتواصل معك عبر التلجرام وإرسال الإعلانات المهمة، مثل توسّع الفئة، بدء تسجيل الحضور، أو تسجيل إنذار على حسابك.
+              </div>
               <div className="detail-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <span>{telegramNotificationsEnabled ? 'التنبيهات مفعلة' : 'التنبيهات متوقفة'}</span>
                 <button
@@ -978,6 +1013,10 @@ export default function Home() {
           </div>
 
           <div className="last-updated">آخر تحديث للنظام: {formatDate(loggedStudent?.['تاريخ_تغيير_الفئة'])}</div>
+
+          <div className="student-footer-actions">
+            <button className="logout-button" type="button" onClick={logout}>تسجيل الخروج</button>
+          </div>
         </div>
       </div>
     </main>
