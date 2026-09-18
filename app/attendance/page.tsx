@@ -2581,7 +2581,7 @@ export default function AttendancePage() {
             <header className="attendance-header">
           <div className="attendance-header-inner">
             <img
-              src="https://drive.google.com/thumbnail?id=1WBYFxtmLUfuREUY1H5Uso5ltomjshWlq&sz=w1000"
+              src="/institute-logo.png"
               alt="شعار المعهد"
               className="attendance-logo"
             />

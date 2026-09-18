@@ -5,16 +5,13 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { writeAuditLog } from '../lib/auditLog';
 import {
-  getAttendanceForStudent,
   getClassAvailabilityOptions,
   getStudentById,
   getWarningsForStudent,
   getRecordValue,
   normalizeText,
   StudentRow,
-  updateStudentClass,
 } from '../lib/studentData';
-import { buildStudentTelegramMessage, sendTelegramNotification } from '../lib/telegram';
 
 type TabKey = 'grades' | 'record' | 'status';
 
@@ -130,26 +127,6 @@ const extractGrades = (rows: Record<string, unknown>[]): GradeEntry[] => {
   });
 };
 
-const parseAttendance = (rows: Record<string, unknown>[]) => {
-  const summary = { present: 0, absent: 0 };
-
-  rows.forEach((row) => {
-    const status = getValueByKeys(row, ['الحضور', 'حضور', 'status', 'الحالة', 'attendance']) as string | number | boolean | undefined;
-    const normalized = String(status ?? '').trim().toLowerCase();
-
-    if (status === true || normalized === 'حاضر' || normalized === 'present' || normalized === '1' || normalized === 'yes') {
-      summary.present += 1;
-    } else if (status === false || normalized === 'غائب' || normalized === 'absent' || normalized === '0' || normalized === 'no') {
-      summary.absent += 1;
-    }
-  });
-
-  return [
-    { label: 'حاضر', value: String(summary.present), tone: 'present' },
-    { label: 'غائب', value: String(summary.absent), tone: 'absent' },
-  ];
-};
-
 const getTableRows = async (tableNames: string[], select = '*') => {
   for (const tableName of tableNames) {
     const { data, error } = await supabase.from(tableName).select(select).limit(1);
@@ -173,10 +150,6 @@ export default function Home() {
   const [loggedStudent, setLoggedStudent] = useState<StudentRow | null>(null);
   const [grades, setGrades] = useState<GradeEntry[]>([]);
   const [warnings, setWarnings] = useState<Record<string, unknown>[]>([]);
-  const [attendanceSummary, setAttendanceSummary] = useState([
-    { label: 'حاضر', value: '0', tone: 'present' },
-    { label: 'غائب', value: '0', tone: 'absent' },
-  ]);
   const [studentStatus, setStudentStatus] = useState<string>('غير متوفر');
   const [classOptions, setClassOptions] = useState<Array<{ name: string; capacity: number | null; occupied: number; available: number | null }>>([]);
   const [selectedClassForUpdate, setSelectedClassForUpdate] = useState('');
@@ -187,6 +160,15 @@ export default function Home() {
   const [telegramChatIdInput, setTelegramChatIdInput] = useState('');
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetMethods, setResetMethods] = useState<Array<'telegram' | 'email'>>([]);
+  const [resetMethod, setResetMethod] = useState<'telegram' | 'email'>('email');
+  const [resetDestination, setResetDestination] = useState('');
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
 
   const getStudentTelegramChatId = (student: any) => {
     const value = student?.telegram_chat_id ?? student?.['telegram_chat_id'];
@@ -338,27 +320,48 @@ export default function Home() {
   }, [toast]);
 
   useEffect(() => {
-    try {
+    let cancelled = false;
+
+    const restoreStudentSession = async () => {
       const storedStudent = window.localStorage.getItem(studentSessionStorageKey);
       if (!storedStudent) return;
-      const student = JSON.parse(storedStudent) as StudentRow;
-      if (student?.['الرقم الجامعي']) {
-        const restoredPreference = getStudentTelegramPreference(student);
+      const cachedStudent = JSON.parse(storedStudent) as StudentRow;
+      const studentId = String(cachedStudent?.['الرقم الجامعي'] ?? '').trim();
+      if (!studentId) return;
+
+      try {
+        const freshStudent = await getStudentById(studentId);
+        if (cancelled) return;
+        if (!freshStudent) {
+          window.localStorage.removeItem(studentSessionStorageKey);
+          return;
+        }
+
+        const restoredPreference = getStudentTelegramPreference(freshStudent);
         const restoredStudent = {
-          ...(student as StudentRow),
+          ...(freshStudent as StudentRow),
           telegram_notifications_enabled: restoredPreference,
-          telegram_chat_id: getStudentTelegramChatId(student) || undefined,
+          telegram_chat_id: getStudentTelegramChatId(freshStudent) || undefined,
         } as StudentRow;
 
         setLoggedStudent(restoredStudent);
+        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(restoredStudent));
         setTelegramNotificationsEnabled(restoredPreference);
         setActiveTab('record');
         setIsLoggedIn(true);
-        setNotice('تمت استعادة جلسة الطالب.');
+        setNotice('تم التحقق من بيانات الطالب وتحديثها من قاعدة البيانات.');
+      } catch {
+        if (!cancelled) setNotice('تعذر التحقق من بيانات الطالب من قاعدة البيانات.');
       }
-    } catch {
+    };
+
+    void restoreStudentSession().catch(() => {
       window.localStorage.removeItem(studentSessionStorageKey);
-    }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const tabs = [
@@ -379,8 +382,8 @@ export default function Home() {
     const studentId = String(loggedStudent['الرقم الجامعي']);
 
     try {
-      const [attendanceResult, warningsResult, gradesResult, statusResult] = await Promise.all([
-        getAttendanceForStudent(studentId).then((rows) => ({ data: rows })),
+      const [studentResult, warningsResult, gradesResult] = await Promise.all([
+        getStudentById(studentId),
         getWarningsForStudent(studentId).then((rows) => ({ data: rows })),
         getTableRows(['الاعمال', 'الأعمال', 'أعمال', 'العملي', 'النظري']).then(({ data }) => ({
           data: Array.isArray(data) ? data.filter((row) => {
@@ -389,15 +392,18 @@ export default function Home() {
             return String(rowStudentId ?? '') === String(studentId);
           }) : [],
         })),
-        Promise.resolve({ data: Array.isArray(loggedStudent) ? loggedStudent : [loggedStudent].filter(Boolean) }),
       ]);
+
+      const freshStudent = studentResult ?? loggedStudent;
+      if (freshStudent && JSON.stringify(freshStudent) !== JSON.stringify(loggedStudent)) {
+        setLoggedStudent(freshStudent);
+        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(freshStudent));
+      }
 
       const gradeRows = gradesResult.data.flatMap((row) => extractGrades([row as unknown as Record<string, unknown>]));
       setGrades(gradeRows);
       setWarnings(warningsResult.data as unknown as Record<string, unknown>[]);
-      setAttendanceSummary(parseAttendance(attendanceResult.data as unknown as Record<string, unknown>[]));
-
-      const statusData = (statusResult.data[0] as Record<string, unknown> | undefined) ?? (loggedStudent as Record<string, unknown> | null) ?? {};
+      const statusData = (freshStudent as Record<string, unknown> | null) ?? {};
       const statusValue = getValueByKeys(statusData, ['الحالة', 'status', 'الحالة_الدراسية']) ?? 'غير متوفر';
       setStudentStatus(normalizeText(statusValue));
     } catch {
@@ -494,6 +500,86 @@ export default function Home() {
     }
   };
 
+  const resetErrorMessage = (error?: string) => ({
+    'student-not-found': 'لم يتم العثور على طالب بهذا الرقم أو رقم الهاتف.',
+    'no-recovery-method': 'لا يوجد تلجرام مربوط أو بريد إلكتروني مسجل لهذا الطالب.',
+    'student-query-failed': 'تعذر الوصول إلى بيانات الطلاب، حاول مرة أخرى.',
+    'password-reset-table-missing': 'ميزة استعادة كلمة المرور غير مفعلة بعد في قاعدة البيانات.',
+    'reset-code-save-failed': 'تعذر حفظ رمز التحقق، حاول مرة أخرى.',
+    'code-send-failed': 'تعذر إرسال رمز التحقق، حاول مرة أخرى.',
+    'invalid-code': 'رمز التحقق غير صحيح.',
+    'code-expired': 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.',
+    'too-many-attempts': 'تم تجاوز عدد المحاولات، اطلب رمزًا جديدًا.',
+    'invalid-reset-input': 'أدخل رمزًا من 6 أرقام وكلمة مرور من 8 محارف على الأقل.',
+  }[error ?? ''] ?? 'حدث خطأ أثناء استعادة كلمة المرور.');
+
+  const requestPasswordResetCode = async () => {
+    const identifier = resetIdentifier.trim();
+    if (!identifier) {
+      setToast({ message: 'أدخل الرقم الجامعي أو رقم الهاتف أولًا.', type: 'error' });
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const response = await fetch('/api/student/password-reset/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, method: resetMethods.length ? resetMethod : undefined }),
+      });
+      const result = await response.json() as { success?: boolean; error?: string; methods?: Array<'telegram' | 'email'>; method?: 'telegram' | 'email'; destination?: string; requiresMethod?: boolean };
+      if (!result.success) {
+        setToast({ message: resetErrorMessage(result.error), type: 'error' });
+        return;
+      }
+
+      setResetMethods(result.methods ?? []);
+      setResetMethod(result.method ?? result.methods?.[0] ?? 'email');
+      if (result.requiresMethod) {
+        setToast({ message: 'اختر طريقة إرسال رمز التحقق.', type: 'info' });
+        return;
+      }
+      setResetDestination(result.destination ?? 'وسيلة التواصل المرتبطة');
+      setResetCodeSent(true);
+      setToast({ message: `تم إرسال رمز التحقق عبر ${result.method === 'telegram' ? 'التليجرام' : 'البريد الإلكتروني'}.`, type: 'success' });
+    } catch {
+      setToast({ message: 'تعذر الاتصال بخدمة استعادة كلمة المرور.', type: 'error' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const sendSelectedPasswordResetCode = async () => {
+    await requestPasswordResetCode();
+  };
+
+  const verifyPasswordReset = async () => {
+    setResetLoading(true);
+    try {
+      const response = await fetch('/api/student/password-reset/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: resetIdentifier, code: resetCode, newPassword }),
+      });
+      const result = await response.json() as { success?: boolean; error?: string };
+      if (!result.success) {
+        setToast({ message: resetErrorMessage(result.error), type: 'error' });
+        return;
+      }
+
+      setShowPasswordReset(false);
+      setResetCodeSent(false);
+      setResetIdentifier('');
+      setResetCode('');
+      setNewPassword('');
+      setToast({ message: 'تم تغيير كلمة المرور بنجاح، يمكنك تسجيل الدخول الآن.', type: 'success' });
+    } catch {
+      setToast({ message: 'تعذر التحقق من رمز الاستعادة.', type: 'error' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleClassChange = async () => {
     const nextClass = String(selectedClassForUpdate ?? '').trim();
     const currentClass = String(loggedStudent?.['الفئة'] ?? '').trim();
@@ -510,7 +596,15 @@ export default function Home() {
 
     setIsChangingClass(true);
     try {
-      const result = await updateStudentClass(String(loggedStudent?.['الرقم الجامعي'] ?? ''), nextClass);
+      const response = await fetch('/api/student/class-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: String(loggedStudent?.['الرقم الجامعي'] ?? ''),
+          nextClass,
+        }),
+      });
+      const result = await response.json() as { success?: boolean; error?: string; emailSent?: boolean; telegramSent?: boolean };
       if (!result.success) {
         setNotice(result.error === 'class-full' ? 'لا يمكن الانتقال إلى هذه الفئة لأن المقاعد ممتلئة' : 'تعذر تغيير الفئة');
         setToast({ message: result.error === 'class-full' ? 'لا توجد مقاعد متاحة في هذه الفئة' : 'تعذر تغيير الفئة', type: 'error' });
@@ -525,29 +619,14 @@ export default function Home() {
 
       setLoggedStudent(updatedStudent as StudentRow);
       window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(updatedStudent));
-      setNotice(`تم تغيير الفئة بنجاح إلى ${nextClass}`);
+      const notificationText = [
+        result.emailSent ? 'البريد الإلكتروني' : '',
+        result.telegramSent ? 'التليجرام' : '',
+      ].filter(Boolean).join(' و ');
+      setNotice(notificationText
+        ? `تم تغيير الفئة إلى ${nextClass} وإرسال إشعار عبر ${notificationText}.`
+        : `تم تغيير الفئة إلى ${nextClass}.`);
       setToast({ message: `تم تغيير الفئة إلى ${nextClass}`, type: 'success' });
-
-      const telegramChatId = getStudentTelegramChatId(loggedStudent);
-      if (telegramNotificationsEnabled && telegramChatId) {
-        const telegramMessage = buildStudentTelegramMessage({
-          studentName: String(loggedStudent?.['اسم الطالب'] ?? 'الطالب'),
-          studentId: String(loggedStudent?.['الرقم الجامعي'] ?? ''),
-          studentYear: String(loggedStudent?.['السنه الدراسية'] ?? 'غير محدد'),
-          studentClass: nextClass,
-          statusText: `تم تغيير الفئة بنجاح من ${currentClass || 'غير محددة'} إلى ${nextClass}.`,
-        });
-        const telegramResult = await sendTelegramNotification(telegramMessage, {
-          chatId: telegramChatId,
-          enabled: true,
-        });
-
-        if (telegramResult?.ok === true) {
-          setNotice(`تم تغيير الفئة إلى ${nextClass} وإرسال إشعار إلى التلجرام.`);
-        } else {
-          setNotice(`تم تغيير الفئة إلى ${nextClass}، لكن تعذر إرسال إشعار التلجرام.`);
-        }
-      }
 
       await refreshClassOptions();
       writeAuditLog({
@@ -610,18 +689,18 @@ export default function Home() {
           </div>
         )}
 
-        <div className="login-card" style={{ position: 'relative', zIndex: 1 }}>
+        <div className={`login-card ${showPasswordReset ? 'password-reset-mode' : ''}`} style={{ position: 'relative', zIndex: 1 }}>
           <div className="institute-header login-institute-header">
             <img
               className="login-logo"
-              src="https://drive.google.com/thumbnail?id=1WBYFxtmLUfuREUY1H5Uso5ltomjshWlq&sz=w1000"
+              src="/institute-logo.png"
               alt="شعار المعهد"
             />
             <h2>المعهد التقاني لطب الأسنان</h2>
             <h3>جامعة اللاذقية</h3>
           </div>
 
-          <h1 className="login-title">استعلام قسم تعويضات أسنان</h1>
+          <h1 className="login-title">{showPasswordReset ? 'إعادة تعيين كلمة المرور' : 'استعلام قسم تعويضات أسنان'}</h1>
 
           <form onSubmit={handleLogin} className="login-form">
             <div className="form-group">
@@ -672,6 +751,72 @@ export default function Home() {
             </button>
           </form>
 
+          <button
+            type="button"
+            className="forgot-password-button"
+            aria-expanded={showPasswordReset}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const nextState = !showPasswordReset;
+              setShowPasswordReset(nextState);
+              setResetCodeSent(false);
+              setResetMethods([]);
+              if (!nextState) {
+                setResetIdentifier('');
+                setResetCode('');
+                setNewPassword('');
+              }
+            }}
+          >
+            {showPasswordReset ? 'العودة إلى تسجيل الدخول' : 'نسيت كلمة المرور؟'}
+          </button>
+
+          {showPasswordReset && (
+            <section className="password-reset-panel">
+              <h3>استعادة كلمة المرور</h3>
+              <p>أدخل الرقم الجامعي أو رقم الهاتف للبحث عن حسابك.</p>
+              <input
+                type="text"
+                value={resetIdentifier}
+                onChange={(event) => setResetIdentifier(event.target.value)}
+                placeholder="الرقم الجامعي أو رقم الهاتف"
+                disabled={resetLoading || resetCodeSent}
+              />
+              <div className="password-reset-phone-hint">
+                إذا كنت تستخدم رقم الهاتف، اكتبه بدون الصفر الأول، مثال: 992222222
+              </div>
+
+              {!resetCodeSent && resetMethods.length > 1 && (
+                <div className="password-reset-methods">
+                  <span>اختر طريقة إرسال رمز التحقق:</span>
+                  <div>
+                    {resetMethods.includes('telegram') && <button type="button" className={resetMethod === 'telegram' ? 'selected' : ''} onClick={() => setResetMethod('telegram')}>التليجرام</button>}
+                    {resetMethods.includes('email') && <button type="button" className={resetMethod === 'email' ? 'selected' : ''} onClick={() => setResetMethod('email')}>البريد الإلكتروني</button>}
+                  </div>
+                </div>
+              )}
+
+              {!resetCodeSent ? (
+                <button type="button" className="login-button password-reset-action" onClick={sendSelectedPasswordResetCode} disabled={resetLoading}>
+                  {resetLoading ? 'جاري الإرسال...' : resetMethods.length > 1 ? 'إرسال رمز التحقق' : 'متابعة'}
+                </button>
+              ) : (
+                <>
+                  <div className="password-reset-destination">تم إرسال الرمز عبر {resetMethod === 'telegram' ? 'التليجرام' : `البريد الإلكتروني (${resetDestination})`}</div>
+                  <input type="text" inputMode="numeric" maxLength={6} value={resetCode} onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ''))} placeholder="رمز التحقق - 6 أرقام" disabled={resetLoading} />
+                  <input type="password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="كلمة المرور الجديدة - 8 محارف على الأقل" disabled={resetLoading} />
+                  <button type="button" className="login-button password-reset-action" onClick={() => void verifyPasswordReset()} disabled={resetLoading}>
+                    {resetLoading ? 'جاري التحقق...' : 'تغيير كلمة المرور'}
+                  </button>
+                  <button type="button" className="password-reset-resend" onClick={() => { setResetCodeSent(false); setResetCode(''); setNewPassword(''); }}>
+                    إرسال رمز جديد
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+
           <div className="login-help">
             <strong>ملاحظات:</strong>
             <span>استخدم الرقم الجامعي وكلمة السر الخاصة بك</span>
@@ -696,7 +841,7 @@ export default function Home() {
           <div className="student-brand-center student-identity-hero">
             <img
               className="institute-logo"
-              src="https://drive.google.com/thumbnail?id=1WBYFxtmLUfuREUY1H5Uso5ltomjshWlq&sz=w1000"
+              src="/institute-logo.png"
               alt="شعار المعهد"
             />
             <div className="student-brand-text">
@@ -735,19 +880,10 @@ export default function Home() {
             <div className="info-item"><span className="info-label"><i className="fa-solid fa-check-circle" /> السنة الدراسية</span> {formatStudentValue(loggedStudent?.['السنه الدراسية'])}</div>
           </div>
 
-          <div className="student-quick-stats" aria-label="ملخص الحضور">
-            {attendanceSummary.map((item) => (
-              <div className={`student-quick-stat ${item.tone}`} key={item.tone}>
-                <span className="student-quick-stat-value">{item.value}</span>
-                <span className="student-quick-stat-label">{item.label}</span>
-              </div>
-            ))}
-          </div>
-
           <div className="student-class-manager" style={{ marginTop: 24, padding: '20px 24px', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>تغيير الفئة</h3>
-              <div style={{ color: '#475569', fontSize: 14 }}>
+              <h3 className="class-change-title" style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>تغيير الفئة</h3>
+              <div className="class-change-muted" style={{ color: '#475569', fontSize: 14 }}>
                 {classOptions.length > 0
                   ? classOptions.filter((item) => item.available !== null && item.available > 0).length
                   : 0} فئة متاحة حالياً
@@ -758,6 +894,7 @@ export default function Home() {
               <select
                 value={selectedClassForUpdate}
                 onChange={(event) => setSelectedClassForUpdate(event.target.value)}
+                className="class-change-select"
                 style={{ minWidth: 180, padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#fff' }}
               >
                 <option value="">اختر الفئة</option>
@@ -791,7 +928,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div style={{ marginTop: 12, color: '#475569', fontSize: 14 }}>
+            <div className="class-change-muted" style={{ marginTop: 12, color: '#475569', fontSize: 14 }}>
               {classOptions.length > 0 && classOptions.find((item) => item.name === selectedClassForUpdate)?.available !== undefined
                 ? `المقاعد المتبقية: ${classOptions.find((item) => item.name === selectedClassForUpdate)?.available ?? 'غير محدد'}`
                 : 'لا توجد معلومات سعة مفعلة لهذا الفصل'}
@@ -801,7 +938,7 @@ export default function Home() {
           <div className="student-details-grid student-extra-details">
             <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
               <div className="detail-label">إعدادات التنبيهات</div>
-              <div style={{ marginBottom: 12, color: '#475569', fontSize: 14, lineHeight: 1.8 }}>
+              <div className="notification-description" style={{ marginBottom: 12, color: '#475569', fontSize: 14, lineHeight: 1.8 }}>
                 فعّل التنبيهات للسماح للمعهد بالتواصل معك عبر التلجرام وإرسال الإعلانات المهمة، مثل توسّع الفئة، بدء تسجيل الحضور، أو تسجيل إنذار على حسابك.
               </div>
               <div className="detail-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -840,7 +977,7 @@ export default function Home() {
             </div>
 
             {showTelegramSettingsModal && (
-              <div style={{ gridColumn: '1 / -1', background: '#f8fafc', border: '1px solid #dbeafe', borderRadius: 14, padding: 20 }}>
+              <div className="student-telegram-modal" style={{ gridColumn: '1 / -1', background: '#f8fafc', border: '1px solid #dbeafe', borderRadius: 14, padding: 20 }}>
                 <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>تفعيل تنبيهات التلجرام 🔔</div>
                 <ol style={{ color: '#475569', lineHeight: 1.8, marginBottom: 12, paddingRight: 20 }}>
                   <li>اضغط على زر "فتح بوت المعهد" أدناه.</li>

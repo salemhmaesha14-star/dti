@@ -8,15 +8,17 @@ export function buildStudentTelegramMessage({
   studentYear,
   studentClass,
   statusText,
+  title = 'تنبيه نظام الحضور والغياب',
 }: {
   studentName: string;
   studentId: string;
   studentYear: string;
   studentClass: string;
   statusText: string;
+  title?: string;
 }) {
   return [
-    '🔔 <b>تنبيه نظام الحضور والغياب</b>',
+    `🔔 <b>${escapeHtml(title)}</b>`,
     '━━━━━━━━━━━━━━━━━━━',
     `👤 <b>الاسم:</b> ${escapeHtml(studentName)}`,
     `🆔 <b>الرقم الجامعي:</b> ${escapeHtml(studentId)}`,
@@ -31,6 +33,24 @@ export async function sendTelegramNotification(
   message: string,
   options?: { chatId?: string; enabled?: boolean; skipValidation?: boolean }
 ) {
+  if (typeof window !== 'undefined') {
+    try {
+      const response = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          chatId: options?.chatId,
+          enabled: options?.enabled,
+        }),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Telegram browser request failed:', error);
+      return { ok: false, status: 'telegram_send_failed' };
+    }
+  }
+
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const targetChatId = options?.chatId || process.env.TELEGRAM_CHAT_ID || '7259761374';
 

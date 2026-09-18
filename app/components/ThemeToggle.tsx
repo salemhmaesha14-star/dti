@@ -1,11 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const THEME_STORAGE_KEY = 'udti-theme';
 
 export function ThemeToggle() {
   const [isDark, setIsDark] = useState(false);
+  const switchRef = useRef<HTMLLabelElement>(null);
+
+  const toggleTheme = () => {
+    const toggleBounds = switchRef.current?.getBoundingClientRect();
+    const originX = toggleBounds ? toggleBounds.left + toggleBounds.width / 2 : 48;
+    const originY = toggleBounds ? toggleBounds.top + toggleBounds.height / 2 : 35;
+    document.documentElement.style.setProperty('--theme-origin-x', `${originX}px`);
+    document.documentElement.style.setProperty('--theme-origin-y', `${originY}px`);
+    document.documentElement.classList.remove('theme-to-dark', 'theme-to-light');
+    document.documentElement.classList.add(isDark ? 'theme-to-light' : 'theme-to-dark');
+    document.documentElement.classList.add('theme-transitioning');
+    setIsDark((prev) => !prev);
+    window.setTimeout(() => {
+      document.documentElement.classList.remove('theme-transitioning', 'theme-to-dark', 'theme-to-light');
+    }, 850);
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
@@ -23,12 +39,12 @@ export function ThemeToggle() {
 
   return (
     <div className="theme-toggle-wrap">
-      <label className="switch" aria-label="تبديل الوضع الليلي/النهاري">
+      <label ref={switchRef} className="switch" aria-label="تبديل الوضع الليلي/النهاري">
         <input
           id="input"
           type="checkbox"
           checked={isDark}
-          onChange={() => setIsDark((prev) => !prev)}
+          onChange={toggleTheme}
         />
         <span className="slider round">
           <span className="sun-moon">

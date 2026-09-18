@@ -120,42 +120,6 @@
   font-size: 0.82rem;
 }
 
-.student-quick-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0 20px;
-}
-
-.student-quick-stat {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 76px;
-  padding: 14px 17px;
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: var(--page-card);
-  box-shadow: 0 8px 20px rgba(24, 58, 49, 0.06);
-}
-
-.student-quick-stat-value {
-  font-size: 1.8rem;
-  font-weight: 900;
-  color: var(--primary-color);
-}
-
-.student-quick-stat-label {
-  color: var(--page-text-soft);
-  font-size: 0.88rem;
-  font-weight: 800;
-}
-
-.student-quick-stat.present { border-inline-start: 4px solid #2f8f68; }
-.student-quick-stat.absent { border-inline-start: 4px solid #c85b5b; }
-.student-quick-stat.waiting { border-inline-start: 4px solid #c28a3e; }
-
 .student-extra-details {
   margin-top: 18px;
   background: var(--page-card-alt);
@@ -199,18 +163,23 @@
 }
 
 @media (max-width: 760px) {
-  .student-profile-grid,
-  .student-quick-stats {
+  .student-profile-grid {
     grid-template-columns: 1fr;
-  }
-
-  .student-quick-stat {
-    min-height: 64px;
   }
 
   .student-dashboard-container {
     padding-top: 14px;
   }
+}
+
+html[data-theme='dark'] .student-dashboard-container .tab {
+  color: #f8fafc !important;
+  background: #0f172a !important;
+}
+
+html[data-theme='dark'] .student-dashboard-container .tab.active {
+  color: #ffffff !important;
+  background: var(--primary-color) !important;
 }
 
 html[data-theme='dark'] {
@@ -618,6 +587,106 @@ html[data-theme='dark'] .system-notice {
   opacity: 0.9;
 }
 
+html.theme-transitioning::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  clip-path: circle(0 at var(--theme-origin-x, 48px) var(--theme-origin-y, 35px));
+  opacity: 0.24;
+  animation: theme-radial-reveal 520ms cubic-bezier(0.2, 0.72, 0.25, 1) forwards;
+}
+
+html.theme-to-dark::after { background: #0b1220; }
+html.theme-to-light::after { background: #f5f7fa; }
+
+html.theme-transitioning body,
+html.theme-transitioning body * {
+  transition-property: background-color, background, color, border-color, box-shadow, fill, stroke;
+  transition-duration: 650ms;
+  transition-timing-function: ease;
+}
+
+@keyframes theme-radial-reveal {
+  0% {
+    clip-path: circle(0 at var(--theme-origin-x, 48px) var(--theme-origin-y, 35px));
+    opacity: 0.24;
+  }
+  100% {
+    clip-path: circle(150vmax at var(--theme-origin-x, 48px) var(--theme-origin-y, 35px));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transitioning::after {
+    animation: none;
+    clip-path: circle(150vmax at var(--theme-origin-x, 48px) var(--theme-origin-y, 35px));
+  }
+
+  html.theme-transitioning body,
+  html.theme-transitioning body * {
+    transition-duration: 0ms;
+  }
+}
+
+html[data-theme='dark'] .student-class-manager {
+  background: var(--page-surface) !important;
+  border-color: var(--page-border) !important;
+  color: var(--page-text) !important;
+}
+
+html[data-theme='dark'] .student-class-manager .class-change-title,
+html[data-theme='dark'] .student-class-manager .class-change-muted,
+html[data-theme='dark'] .student-class-manager .class-change-select {
+  color: var(--page-text) !important;
+}
+
+html[data-theme='dark'] .student-class-manager .class-change-select {
+  background: #0f172a !important;
+  border-color: var(--page-border) !important;
+}
+
+html[data-theme='dark'] .student-class-manager .class-change-select option {
+  background: #0f172a;
+  color: var(--page-text);
+}
+
+html[data-theme='dark'] .notification-description,
+html[data-theme='dark'] .student-telegram-modal,
+html[data-theme='dark'] .student-telegram-modal ol {
+  color: var(--page-text) !important;
+}
+
+html[data-theme='dark'] .student-telegram-modal {
+  background: var(--page-surface) !important;
+  border-color: var(--page-border) !important;
+}
+
+html[data-theme='dark'] .student-telegram-modal input {
+  background: #0f172a !important;
+  color: var(--page-text) !important;
+  border-color: var(--page-border) !important;
+}
+
+html[data-theme='dark'] .student-telegram-modal button:last-child {
+  background: #0f172a !important;
+  color: var(--page-text) !important;
+  border-color: var(--page-border) !important;
+}
+
+html[data-theme='dark'] .toast-error {
+  border-color: #ff8a80;
+  background: #4a1717;
+  color: #ffe4e1;
+}
+
+html[data-theme='dark'] .password-reset-phone-hint {
+  background: rgba(194, 138, 62, 0.2);
+  color: #f8fafc;
+}
+
 button,
 input,
 textarea,
@@ -969,7 +1038,12 @@ a {
 }
 
 .toast-success { border-color: rgba(67, 160, 71, 0.3); background: rgba(67, 160, 71, 0.08); }
-.toast-error { border-color: rgba(229, 57, 53, 0.3); background: rgba(229, 57, 53, 0.08); }
+.toast-error {
+  border: 2px solid #b42318;
+  background: #fff1f0;
+  color: #8a1c13;
+  box-shadow: 0 12px 28px rgba(127, 29, 29, 0.22);
+}
 .toast-info { border-color: rgba(62, 94, 88, 0.25); background: rgba(62, 94, 88, 0.08); }
 
 .toast-icon {
@@ -1100,6 +1174,12 @@ a {
 .login-form {
   display: grid;
   gap: 18px;
+  max-height: 520px;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top center;
+  overflow: hidden;
+  transition: max-height 360ms ease, opacity 260ms ease, transform 360ms ease, margin 360ms ease;
 }
 
 .form-group {
@@ -1160,6 +1240,149 @@ a {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
+.forgot-password-button,
+.password-reset-resend {
+  position: relative;
+  z-index: 2;
+  width: fit-content;
+  display: block;
+  margin: 14px auto 0;
+  border: 0;
+  background: transparent;
+  color: var(--secondary-color);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.forgot-password-button:hover,
+.password-reset-resend:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.password-reset-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--page-card-alt);
+  color: var(--page-text);
+  text-align: right;
+  transform-origin: top center;
+  animation: password-reset-pop 420ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+
+.password-reset-mode .login-form,
+.password-reset-mode .login-help {
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+.password-reset-mode .login-title {
+  margin-bottom: 18px;
+}
+
+.password-reset-mode .password-reset-panel {
+  margin-top: 0;
+}
+
+@keyframes password-reset-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.94);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-form,
+  .login-help {
+    transition: none;
+  }
+
+  .password-reset-panel {
+    animation: none;
+  }
+}
+
+.password-reset-panel h3 {
+  color: var(--primary-color);
+  font-size: 18px;
+}
+
+.password-reset-panel p,
+.password-reset-methods,
+.password-reset-destination {
+  color: var(--page-text-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.password-reset-phone-hint {
+  padding: 8px 10px;
+  border-right: 3px solid #c28a3e;
+  border-radius: 6px;
+  background: rgba(194, 138, 62, 0.1);
+  color: var(--page-text-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.password-reset-panel input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--page-card);
+  color: var(--page-text);
+  font-family: inherit;
+}
+
+.password-reset-methods > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.password-reset-methods button {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--page-card);
+  color: var(--page-text);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.password-reset-methods button.selected {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.password-reset-action {
+  min-height: 46px;
+  margin-top: 4px;
+}
+
 .login-help {
   margin-top: 18px;
   display: grid;
@@ -1170,6 +1393,12 @@ a {
   border: 1px solid rgba(172, 160, 117, 0.3);
   color: #555;
   font-size: 14px;
+  max-height: 120px;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top center;
+  overflow: hidden;
+  transition: max-height 360ms ease, opacity 260ms ease, transform 360ms ease, margin 360ms ease;
 }
 
 .login-help strong {
