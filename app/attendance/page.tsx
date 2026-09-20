@@ -1217,8 +1217,8 @@ export default function AttendancePage() {
       return;
     }
 
-    const studentId = String(normalizedDraft['الرقم الجامعي'] ?? editingStudentId).trim();
-    if (!studentId) {
+    const nextStudentId = String(normalizedDraft['الرقم الجامعي'] ?? editingStudentId).trim();
+    if (!nextStudentId) {
       setNotice('لا يوجد رقم جامعي صالح لتحديث الطالب');
       return;
     }
@@ -1227,6 +1227,18 @@ export default function AttendancePage() {
       Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')
     ) as Record<string, string>;
     const originalStudent = studentDirectory.find((student) => getStudentIdentifier(student) === editingStudentId);
+    const originalIdKey = originalStudent?.['الرقم الجامعي'] !== undefined
+      ? 'الرقم الجامعي'
+      : originalStudent?.student_id !== undefined
+        ? 'student_id'
+        : originalStudent?.studentId !== undefined
+          ? 'studentId'
+          : 'id';
+    const originalIdValue = String(originalStudent?.[originalIdKey as keyof StudentRow] ?? editingStudentId).trim();
+    if (!originalIdValue) {
+      setNotice('لا يوجد معرّف أصلي صالح لتحديث الطالب');
+      return;
+    }
     const changedFields = editableFields.filter((field) => {
       const oldValue = String(originalStudent?.[field as keyof StudentRow] ?? '').trim();
       const newValue = String(cleanPayload[field] ?? '').trim();
@@ -1238,7 +1250,8 @@ export default function AttendancePage() {
     const { data, error } = await supabase
       .from('students')
       .update(cleanPayload)
-      .eq('الرقم الجامعي', studentId);
+      .eq(originalIdKey, originalIdValue)
+      .select();
 
     if (error) {
       console.error('Supabase Error Detail:', error);
@@ -1250,6 +1263,11 @@ export default function AttendancePage() {
       }
 
       setNotice(`تعذر تحديث بيانات الطالب: ${getSupabaseErrorText(error)}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      setNotice('لم يتم العثور على سجل الطالب لتحديثه. أعد تحميل قائمة الطلاب وحاول مرة أخرى.');
       return;
     }
 

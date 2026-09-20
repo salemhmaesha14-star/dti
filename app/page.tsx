@@ -196,6 +196,7 @@ export default function Home() {
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const hasStudentGroup = Boolean(getStudentGroup(loggedStudent as Record<string, unknown> | null));
 
   const getStudentTelegramChatId = (student: any) => {
     const value = student?.telegram_chat_id ?? student?.['telegram_chat_id'];
@@ -362,12 +363,12 @@ export default function Home() {
     window.localStorage.removeItem(studentSessionStorageKey);
   }, []);
 
-  const tabs = [
+  const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'grades', label: 'العلامات' },
     { key: 'record', label: 'السجل' },
     { key: 'status', label: 'الحالة' },
-    { key: 'schedule', label: 'برنامج الدوام' },
-  ] as const;
+    ...(hasStudentGroup ? [{ key: 'schedule' as const, label: 'برنامج الدوام' }] : []),
+  ];
 
   useEffect(() => {
     if (loggedStudent) {
@@ -385,6 +386,20 @@ export default function Home() {
     }
   }, [loggedStudent]);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const studentHistoryState = { studentPortal: true };
+    window.history.pushState(studentHistoryState, '', window.location.pathname || '/');
+    const handleStudentBackNavigation = () => {
+      window.history.pushState(studentHistoryState, '', '/');
+      setNotice('أنت داخل بوابة الطالب. استخدم تسجيل الخروج للعودة إلى صفحة الدخول.');
+    };
+
+    window.addEventListener('popstate', handleStudentBackNavigation);
+    return () => window.removeEventListener('popstate', handleStudentBackNavigation);
+  }, [isLoggedIn]);
+
   const refreshDashboard = useCallback(async () => {
     if (!loggedStudent || !loggedStudent['الرقم الجامعي']) return;
 
@@ -401,7 +416,9 @@ export default function Home() {
             return String(rowStudentId ?? '') === String(studentId);
           }) : [],
         })),
-        supabase.from('schedule_items').select('id, day, start_time, end_time, subject, type, location, group_name'),
+        hasStudentGroup
+          ? supabase.from('schedule_items').select('id, day, start_time, end_time, subject, type, location, group_name')
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       const freshStudent = studentResult ?? loggedStudent;
@@ -426,6 +443,7 @@ export default function Home() {
       } else {
         setScheduleItems([]);
       }
+      if (!currentGroup && activeTab === 'schedule') setActiveTab('record');
       const statusData = (freshStudent as Record<string, unknown> | null) ?? {};
       const statusValue = getValueByKeys(statusData, ['الحالة', 'status', 'الحالة_الدراسية']) ?? 'غير متوفر';
       setStudentStatus(normalizeText(statusValue));
