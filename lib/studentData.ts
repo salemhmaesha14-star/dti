@@ -334,21 +334,25 @@ export const updateStudentClass = async (studentId: string, nextClass: string) =
 };
 
 export const getStudentById = async (studentId: string) => {
-  const tables = ['students'];
   const normalizedStudentId = normalizeStudentIdentifier(studentId);
-  for (const tableName of tables) {
-    const { data, error } = await supabase.from(tableName).select('*');
-    if (error) {
-      const message = String(error.message || '').toLowerCase();
-      if (message.includes('does not exist') || message.includes('relation') || message.includes('not found')) {
-        continue;
-      }
-      throw error;
-    }
+  if (!normalizedStudentId) return null;
+  const lookupValues = Array.from(new Set([String(studentId).trim(), normalizedStudentId].filter(Boolean)));
 
-    const rows = Array.isArray(data) ? (data as StudentRow[]) : [];
-    const match = rows.find((row) => normalizeStudentIdentifier(getStudentId(row)) === normalizedStudentId);
-    if (match) return match;
+  for (const column of ['الرقم الجامعي', 'student_id', 'studentId', 'id']) {
+    for (const lookupValue of lookupValues) {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq(column, lookupValue)
+        .maybeSingle();
+
+      if (!error && data) return data as StudentRow;
+      if (error) {
+        const message = String(error.message || '').toLowerCase();
+        if (message.includes('column') || message.includes('does not exist') || message.includes('not found')) break;
+        throw error;
+      }
+    }
   }
 
   return null;
@@ -489,19 +493,31 @@ export const deleteWarningById = async (warningId: string | number) => {
 };
 
 export const getWarningsForStudent = async (studentId: string) => {
-  const { data } = await getTableRows(['الإنذارات']);
-  return (data as Record<string, unknown>[]).filter((row) => {
-    const rowId = String(getRecordValue(row, ['الرقم الجامعي']) ?? '');
-    return rowId === String(studentId).trim();
-  });
+  const { data, error } = await supabase
+    .from('الإنذارات')
+    .select('*')
+    .eq('الرقم الجامعي', String(studentId).trim())
+    .order('التاريخ', { ascending: false });
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes('does not exist') || message.includes('relation') || message.includes('not found')) return [];
+    throw error;
+  }
+  return Array.isArray(data) ? data as Record<string, unknown>[] : [];
 };
 
 export const getAttendanceForStudent = async (studentId: string) => {
-  const { data } = await getTableRows(['الحضور']);
-  return (data as Record<string, unknown>[]).filter((row) => {
-    const rowId = String(getRecordValue(row, ['الرقم الجامعي', 'student_id', 'studentId']) ?? '');
-    return rowId === String(studentId).trim();
-  });
+  const { data, error } = await supabase
+    .from('الحضور')
+    .select('*')
+    .eq('الرقم الجامعي', String(studentId).trim())
+    .order('التاريخ', { ascending: false });
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes('does not exist') || message.includes('relation') || message.includes('not found')) return [];
+    throw error;
+  }
+  return Array.isArray(data) ? data as Record<string, unknown>[] : [];
 };
 
 export const getStudentMarksForStudent = async (studentId: string) => {

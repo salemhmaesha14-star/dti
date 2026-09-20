@@ -13,7 +13,18 @@ import {
   StudentRow,
 } from '../lib/studentData';
 
-type TabKey = 'grades' | 'record' | 'status';
+type TabKey = 'grades' | 'record' | 'status' | 'schedule';
+
+type ScheduleItem = {
+  id: string | number;
+  day: string;
+  start_time: string;
+  end_time: string;
+  subject: string;
+  type: string;
+  location: string;
+  group_name: string | null;
+};
 
 type GradeEntry = {
   subject: string;
@@ -25,6 +36,8 @@ type GradeEntry = {
 };
 
 const studentSessionStorageKey = 'udti-student-session';
+const rememberedStudentIdStorageKey = 'udti-remembered-student-id';
+const rememberedStudentPasswordStorageKey = 'udti-remembered-student-password';
 
 const metadataKeys = new Set([
   'id',
@@ -141,19 +154,33 @@ const getTableRows = async (tableNames: string[], select = '*') => {
   return { data: [], tableName: tableNames[0], error: null };
 };
 
+const scheduleDays = ['الأحد', 'الأثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+
+const formatScheduleTime = (value: unknown) => String(value ?? '').slice(0, 5);
+
+const getStudentGroup = (student: Record<string, unknown> | null | undefined) => String(
+  student?.['الفئة'] ?? student?.group ?? student?.group_name ?? ''
+).trim().replace(/^فئة\s*/i, '');
+
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('record');
   const [notice, setNotice] = useState('يرجى تسجيل الدخول لعرض نتائجك');
   const [loginData, setLoginData] = useState({ studentId: '', password: '' });
+  const [rememberStudentId, setRememberStudentId] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loggedStudent, setLoggedStudent] = useState<StudentRow | null>(null);
   const [grades, setGrades] = useState<GradeEntry[]>([]);
   const [warnings, setWarnings] = useState<Record<string, unknown>[]>([]);
+  const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [studentStatus, setStudentStatus] = useState<string>('غير متوفر');
   const [classOptions, setClassOptions] = useState<Array<{ name: string; capacity: number | null; occupied: number; available: number | null }>>([]);
   const [selectedClassForUpdate, setSelectedClassForUpdate] = useState('');
   const [isChangingClass, setIsChangingClass] = useState(false);
+  const [newStudentId, setNewStudentId] = useState('');
+  const [studentIdChangeConfirmed, setStudentIdChangeConfirmed] = useState(false);
+  const [isChangingStudentId, setIsChangingStudentId] = useState(false);
+  const [studentIdChangeCompleted, setStudentIdChangeCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] = useState(false);
   const [showTelegramSettingsModal, setShowTelegramSettingsModal] = useState(false);
@@ -214,7 +241,6 @@ export default function Home() {
 
         setLoggedStudent(hydratedStudent);
         setTelegramNotificationsEnabled(enabled);
-        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(hydratedStudent));
       }
     } catch {
       // Ignore DB column mismatch; keep local UI state for active session.
@@ -279,7 +305,6 @@ export default function Home() {
         setTelegramNotificationsEnabled(true);
         setShowTelegramSettingsModal(false);
         setTelegramChatIdInput('');
-        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(updatedStudent));
         setToast({ message: 'تم تفعيل التنبيهات وحفظ معرف التلجرام', type: 'success' });
       } else {
         setToast({ message: 'تعذر حفظ معرف التلجرام', type: 'error' });
@@ -320,59 +345,43 @@ export default function Home() {
   }, [toast]);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
-    const restoreStudentSession = async () => {
-      const storedStudent = window.localStorage.getItem(studentSessionStorageKey);
-      if (!storedStudent) return;
-      const cachedStudent = JSON.parse(storedStudent) as StudentRow;
-      const studentId = String(cachedStudent?.['الرقم الجامعي'] ?? '').trim();
-      if (!studentId) return;
-
-      try {
-        const freshStudent = await getStudentById(studentId);
-        if (cancelled) return;
-        if (!freshStudent) {
-          window.localStorage.removeItem(studentSessionStorageKey);
-          return;
-        }
-
-        const restoredPreference = getStudentTelegramPreference(freshStudent);
-        const restoredStudent = {
-          ...(freshStudent as StudentRow),
-          telegram_notifications_enabled: restoredPreference,
-          telegram_chat_id: getStudentTelegramChatId(freshStudent) || undefined,
-        } as StudentRow;
-
-        setLoggedStudent(restoredStudent);
-        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(restoredStudent));
-        setTelegramNotificationsEnabled(restoredPreference);
-        setActiveTab('record');
-        setIsLoggedIn(true);
-        setNotice('تم التحقق من بيانات الطالب وتحديثها من قاعدة البيانات.');
-      } catch {
-        if (!cancelled) setNotice('تعذر التحقق من بيانات الطالب من قاعدة البيانات.');
-      }
-    };
-
-    void restoreStudentSession().catch(() => {
-      window.localStorage.removeItem(studentSessionStorageKey);
-    });
-
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    const rememberedStudentId = window.localStorage.getItem(rememberedStudentIdStorageKey)?.trim();
+    const rememberedStudentPassword = window.localStorage.getItem(rememberedStudentPasswordStorageKey) ?? '';
+    if (rememberedStudentId || rememberedStudentPassword) {
+      setLoginData((current) => ({
+        studentId: rememberedStudentId ?? current.studentId,
+        password: rememberedStudentPassword,
+      }));
+    }
+    window.localStorage.removeItem(studentSessionStorageKey);
   }, []);
 
   const tabs = [
     { key: 'grades', label: 'العلامات' },
     { key: 'record', label: 'السجل' },
     { key: 'status', label: 'الحالة' },
+    { key: 'schedule', label: 'برنامج الدوام' },
   ] as const;
 
   useEffect(() => {
     if (loggedStudent) {
       void refreshClassOptions();
+
+      const studentId = String(loggedStudent['الرقم الجامعي'] ?? '').trim();
+      if (studentId) {
+        void fetch(`/api/student/student-id-change?studentId=${encodeURIComponent(studentId)}`)
+          .then((response) => response.json() as Promise<{ success?: boolean; used?: boolean }>)
+          .then((result) => {
+            if (result.success) setStudentIdChangeCompleted(result.used === true);
+          })
+          .catch(() => undefined);
+      }
     }
   }, [loggedStudent]);
 
@@ -382,7 +391,7 @@ export default function Home() {
     const studentId = String(loggedStudent['الرقم الجامعي']);
 
     try {
-      const [studentResult, warningsResult, gradesResult] = await Promise.all([
+      const [studentResult, warningsResult, gradesResult, scheduleResult] = await Promise.all([
         getStudentById(studentId),
         getWarningsForStudent(studentId).then((rows) => ({ data: rows })),
         getTableRows(['الاعمال', 'الأعمال', 'أعمال', 'العملي', 'النظري']).then(({ data }) => ({
@@ -392,17 +401,31 @@ export default function Home() {
             return String(rowStudentId ?? '') === String(studentId);
           }) : [],
         })),
+        supabase.from('schedule_items').select('id, day, start_time, end_time, subject, type, location, group_name'),
       ]);
 
       const freshStudent = studentResult ?? loggedStudent;
       if (freshStudent && JSON.stringify(freshStudent) !== JSON.stringify(loggedStudent)) {
         setLoggedStudent(freshStudent);
-        window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(freshStudent));
       }
 
       const gradeRows = gradesResult.data.flatMap((row) => extractGrades([row as unknown as Record<string, unknown>]));
       setGrades(gradeRows);
       setWarnings(warningsResult.data as unknown as Record<string, unknown>[]);
+      const currentGroup = getStudentGroup(freshStudent as Record<string, unknown>);
+      if (!scheduleResult.error) {
+        const matchingSchedule = (Array.isArray(scheduleResult.data) ? scheduleResult.data : [])
+          .filter((item) => {
+            const scheduleItem = item as Record<string, unknown>;
+            const itemGroup = String(scheduleItem.group_name ?? '').trim();
+            return !itemGroup || itemGroup === currentGroup;
+          })
+          .map((item) => item as ScheduleItem)
+          .sort((first, second) => `${scheduleDays.indexOf(first.day)}-${first.start_time}`.localeCompare(`${scheduleDays.indexOf(second.day)}-${second.start_time}`));
+        setScheduleItems(matchingSchedule);
+      } else {
+        setScheduleItems([]);
+      }
       const statusData = (freshStudent as Record<string, unknown> | null) ?? {};
       const statusValue = getValueByKeys(statusData, ['الحالة', 'status', 'الحالة_الدراسية']) ?? 'غير متوفر';
       setStudentStatus(normalizeText(statusValue));
@@ -482,7 +505,13 @@ export default function Home() {
       setTelegramNotificationsEnabled(preference);
       setActiveTab('record');
       setIsLoggedIn(true);
-      window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(hydratedUser));
+      if (rememberStudentId) {
+        window.localStorage.setItem(rememberedStudentIdStorageKey, studentId);
+        window.localStorage.setItem(rememberedStudentPasswordStorageKey, password);
+      } else {
+        window.localStorage.removeItem(rememberedStudentIdStorageKey);
+        window.localStorage.removeItem(rememberedStudentPasswordStorageKey);
+      }
       writeAuditLog({
         action: 'student_login',
         userType: 'student',
@@ -502,11 +531,14 @@ export default function Home() {
 
   const resetErrorMessage = (error?: string) => ({
     'student-not-found': 'لم يتم العثور على طالب بهذا الرقم أو رقم الهاتف.',
+    'student-email-missing': 'لا يوجد بريد إلكتروني مسجل لهذا الحساب.',
     'no-recovery-method': 'لا يوجد تلجرام مربوط أو بريد إلكتروني مسجل لهذا الطالب.',
     'student-query-failed': 'تعذر الوصول إلى بيانات الطلاب، حاول مرة أخرى.',
     'password-reset-table-missing': 'ميزة استعادة كلمة المرور غير مفعلة بعد في قاعدة البيانات.',
     'reset-code-save-failed': 'تعذر حفظ رمز التحقق، حاول مرة أخرى.',
     'code-send-failed': 'تعذر إرسال رمز التحقق، حاول مرة أخرى.',
+    'telegram-send-failed': 'تعذر إرسال رمز التحقق عبر التليجرام، تحقق من إعدادات البوت.',
+    'email-send-failed': 'تعذر إرسال رمز التحقق عبر البريد الإلكتروني.',
     'invalid-code': 'رمز التحقق غير صحيح.',
     'code-expired': 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.',
     'too-many-attempts': 'تم تجاوز عدد المحاولات، اطلب رمزًا جديدًا.',
@@ -618,7 +650,6 @@ export default function Home() {
       };
 
       setLoggedStudent(updatedStudent as StudentRow);
-      window.localStorage.setItem(studentSessionStorageKey, JSON.stringify(updatedStudent));
       const notificationText = [
         result.emailSent ? 'البريد الإلكتروني' : '',
         result.telegramSent ? 'التليجرام' : '',
@@ -644,6 +675,56 @@ export default function Home() {
     }
   };
 
+  const handleStudentIdChange = async () => {
+    const currentStudentId = String(loggedStudent?.['الرقم الجامعي'] ?? '').trim();
+    const nextStudentId = newStudentId.trim();
+
+    if (!currentStudentId || !/^\d+$/.test(nextStudentId)) {
+      setToast({ message: 'أدخل رقمًا جامعيًا جديدًا صحيحًا.', type: 'error' });
+      return;
+    }
+    if (!studentIdChangeConfirmed) {
+      setToast({ message: 'يجب تأكيد مطابقة الرقم للقوائم المنشورة وتحمل مسؤولية إدخاله.', type: 'error' });
+      return;
+    }
+
+    setIsChangingStudentId(true);
+    try {
+      const response = await fetch('/api/student/student-id-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentStudentId, newStudentId: nextStudentId, confirmed: true }),
+      });
+      const result = await response.json() as { success?: boolean; studentId?: string; details?: string; error?: string };
+      if (!response.ok || !result.success) {
+        setToast({ message: result.details ?? 'تعذر تغيير الرقم الجامعي.', type: 'error' });
+        return;
+      }
+
+      const updatedStudent = { ...(loggedStudent ?? {}), 'الرقم الجامعي': result.studentId ?? nextStudentId } as StudentRow;
+      setLoggedStudent(updatedStudent);
+      if (rememberStudentId) {
+        window.localStorage.setItem(rememberedStudentIdStorageKey, result.studentId ?? nextStudentId);
+      }
+      setNewStudentId('');
+      setStudentIdChangeConfirmed(false);
+      setStudentIdChangeCompleted(true);
+      setNotice('تم تغيير الرقم الجامعي بنجاح. هذا التغيير متاح مرة واحدة فقط.');
+      setToast({ message: 'تم تغيير الرقم الجامعي بنجاح.', type: 'success' });
+      writeAuditLog({
+        action: 'student_id_changed',
+        userType: 'student',
+        userId: result.studentId ?? nextStudentId,
+        username: String(loggedStudent?.['اسم الطالب'] ?? ''),
+        details: { previousStudentId: currentStudentId, nextStudentId: result.studentId ?? nextStudentId },
+      });
+    } catch {
+      setToast({ message: 'تعذر الاتصال بخدمة تغيير الرقم الجامعي.', type: 'error' });
+    } finally {
+      setIsChangingStudentId(false);
+    }
+  };
+
   const logout = () => {
     writeAuditLog({
       action: 'student_logout',
@@ -655,6 +736,9 @@ export default function Home() {
     setIsLoggedIn(false);
     setLoggedStudent(null);
     setLoginData({ studentId: '', password: '' });
+    setNewStudentId('');
+    setStudentIdChangeConfirmed(false);
+    setStudentIdChangeCompleted(false);
     setNotice('تم تسجيل الخروج بنجاح');
   };
 
@@ -738,6 +822,17 @@ export default function Home() {
             </div>
 
             {capsLockOn && <div className="caps-warning">⚠️ Caps Lock مفعّل</div>}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '0 0 7px', color: '#64748b', fontSize: 11 }}>
+              <input
+                type="checkbox"
+                checked={rememberStudentId}
+                onChange={(event) => setRememberStudentId(event.target.checked)}
+                disabled={isLoading}
+                style={{ width: 13, height: 13, margin: 0 }}
+              />
+              تذكر الرقم الجامعي وكلمة المرور
+            </label>
 
             <button type="submit" className={`login-button ${isLoading ? 'is-loading' : ''}`} disabled={isLoading}>
               {isLoading ? (
@@ -935,6 +1030,44 @@ export default function Home() {
             </div>
           </div>
 
+          {!studentIdChangeCompleted && (
+            <div className="student-id-change-manager" style={{ marginTop: 18, padding: '20px 24px', background: '#fffaf0', borderRadius: 16, border: '1px solid #ead7ad' }}>
+            <h3 style={{ margin: 0, fontSize: 18, color: '#7c4a03' }}>تغيير الرقم الجامعي</h3>
+            <p style={{ margin: '10px 0 6px', color: '#5f4b2b', fontSize: 14, lineHeight: 1.8 }}>
+              يمكنك تغيير الرقم الجامعي مرة واحدة فقط. أدخل الرقم الوزاري المطابق للقوائم المنشورة الرسمية.
+            </p>
+            <p style={{ margin: '0 0 14px', color: '#8a3d12', fontSize: 14, fontWeight: 700, lineHeight: 1.8 }}>
+              تنبيه: أي خطأ في تعيين الرقم الجامعي يتحمل الطالب مسؤوليته الكاملة.
+            </p>
+            <input
+              value={newStudentId}
+              onChange={(event) => setNewStudentId(event.target.value.replace(/\D/g, ''))}
+              placeholder="الرقم الجامعي الجديد حسب القوائم الوزارية"
+              inputMode="numeric"
+              disabled={studentIdChangeCompleted || isChangingStudentId}
+              style={{ width: '100%', minHeight: 44, padding: '10px 12px', border: '1px solid #d6bd87', borderRadius: 9, background: '#fff', color: '#3f2b12', fontFamily: 'inherit' }}
+            />
+            <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 12, color: '#5f4b2b', fontSize: 13, lineHeight: 1.7 }}>
+              <input
+                type="checkbox"
+                checked={studentIdChangeConfirmed}
+                onChange={(event) => setStudentIdChangeConfirmed(event.target.checked)}
+                disabled={studentIdChangeCompleted || isChangingStudentId}
+                style={{ marginTop: 4 }}
+              />
+              أؤكد أن الرقم مطابق للقوائم المنشورة والرقم الوزاري، وأتحمل مسؤولية أي خطأ في إدخاله.
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleStudentIdChange()}
+              disabled={studentIdChangeCompleted || isChangingStudentId || !newStudentId.trim() || !studentIdChangeConfirmed}
+              style={{ marginTop: 14, padding: '10px 18px', border: 'none', borderRadius: 9, background: studentIdChangeCompleted || isChangingStudentId || !newStudentId.trim() || !studentIdChangeConfirmed ? '#c9b98f' : '#9a5b0a', color: '#fff', fontWeight: 700, cursor: studentIdChangeCompleted || isChangingStudentId || !newStudentId.trim() || !studentIdChangeConfirmed ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+            >
+              {studentIdChangeCompleted ? 'تم استخدام التغيير' : isChangingStudentId ? 'جاري الحفظ...' : 'تأكيد تغيير الرقم'}
+            </button>
+            </div>
+          )}
+
           <div className="student-details-grid student-extra-details">
             <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
               <div className="detail-label">إعدادات التنبيهات</div>
@@ -1122,6 +1255,63 @@ export default function Home() {
                     ))}
                   </div>
                 )}
+
+              </div>
+            )}
+
+            {activeTab === 'schedule' && (
+              <div className="tab-content active">
+                <div style={{ display: 'grid', gap: 18 }}>
+                  {scheduleDays.map((day) => {
+                    const dayItems = scheduleItems
+                      .filter((item) => item.day === day)
+                      .sort((first, second) => first.start_time.localeCompare(second.start_time));
+
+                    return (
+                      <section key={day} style={{ display: 'grid', gap: 10 }}>
+                        <h3 style={{ margin: 0, paddingBottom: 8, borderBottom: '2px solid #e2e8f0', color: '#0f172a', fontSize: 17 }}>
+                          {day}
+                        </h3>
+                        {dayItems.length === 0 ? (
+                          <div style={{ padding: '12px 14px', borderRadius: 10, background: '#f8fafc', color: '#64748b', fontSize: 14 }}>
+                            لا توجد محاضرات مسجلة
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
+                            {dayItems.map((item) => {
+                              const isPractical = item.type.trim() === 'عملي';
+                              return (
+                                <article
+                                  key={item.id}
+                                  style={{
+                                    padding: 14,
+                                    borderRadius: 12,
+                                    border: `1px solid ${isPractical ? '#f4c77b' : '#a8c9ed'}`,
+                                    background: isPractical ? '#fff8e8' : '#eff7ff',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                                    <strong style={{ color: '#0f172a', lineHeight: 1.6 }}>{item.subject}</strong>
+                                    <span style={{ color: isPractical ? '#9a5b0a' : '#2563a8', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                      {isPractical ? 'عملي' : 'نظري'}
+                                    </span>
+                                  </div>
+                                  <div style={{ marginTop: 10, color: '#334155', fontSize: 14 }}>
+                                    {formatScheduleTime(item.start_time)} - {formatScheduleTime(item.end_time)}
+                                  </div>
+                                  <div style={{ marginTop: 5, color: '#64748b', fontSize: 13 }}>
+                                    {item.location || 'القاعة غير محددة'}
+                                    {item.group_name ? ` · المجموعة ${item.group_name}` : ''}
+                                  </div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

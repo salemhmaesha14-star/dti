@@ -1,4 +1,4 @@
-import { createHash, randomInt } from 'crypto';
+import { randomInt } from 'crypto';
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
 import { sendEmail } from '../../../../../lib/email';
@@ -8,39 +8,60 @@ import { normalizeStudentIdentifier } from '../../../../../lib/studentData';
 export const dynamic = 'force-dynamic';
 
 const normalize = (value: unknown) => String(value ?? '').trim();
-const hashCode = (code: string) => createHash('sha256').update(code).digest('hex');
+
 const maskEmail = (email: string) => {
   const [name, domain] = email.split('@');
   if (!name || !domain) return 'البريد الإلكتروني المرتبط';
   return `${name.slice(0, 2)}***@${domain}`;
 };
 
+const getErrorDetails = (error: unknown) => ({
+  message: error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error),
+  code: (error as { code?: string })?.code,
+  details: (error as { details?: string })?.details,
+  hint: (error as { hint?: string })?.hint,
+});
+
+const jsonError = (error: string, status: number, details?: unknown) => NextResponse.json({
+  success: false,
+  error,
+  ...(details ? { details } : {}),
+}, { status });
+
 export async function POST(request: Request) {
   let stage = 'start';
+
   try {
     stage = 'parse-request';
     const body = await request.json() as { identifier?: string; method?: 'telegram' | 'email' };
     const identifier = normalize(body.identifier);
     const normalizedIdentifier = normalizeStudentIdentifier(identifier);
-    if (!identifier) return NextResponse.json({ success: false, error: 'missing-identifier' }, { status: 400 });
+
+    if (!identifier) return jsonError('missing-identifier', 400, 'أدخل البريد الإلكتروني أو الرقم أو الهاتف.');
 
     stage = 'find-student';
-    const { data, error } = await supabase.from('students').select('*');
-    if (error) {
-      console.error('RESET_PASSWORD_ERROR:', { stage, code: error.code, message: error.message, details: error.details, hint: error.hint });
-      return NextResponse.json({ success: false, error: 'student-query-failed' }, { status: 500 });
+    const studentLookup = await supabase.from('students').select('*');
+    if (studentLookup.error) {
+      console.error('RESET_PASSWORD_ERROR:', studentLookup.error);
+      return jsonError('student-query-failed', 500, getErrorDetails(studentLookup.error));
     }
 
-    const student = (Array.isArray(data) ? data : []).find((row) => {
+    const student = (Array.isArray(studentLookup.data) ? studentLookup.data : []).find((row) => {
       const record = row as Record<string, unknown>;
-      return [record['الرقم الجامعي'], record.student_id, record.studentId]
+      return [record['الرقم الجامعي'], record.student_id, record.studentId, record.id]
         .some((value) => normalizeStudentIdentifier(value) === normalizedIdentifier)
-        || [record['رقم الهاتف'], record.phone].some((value) => normalize(value) === identifier);
+        || [record['رقم الهاتف'], record.phone]
+          .some((value) => normalize(value) === identifier)
+        || [record['البريد الإلكتروني'], record.email]
+          .some((value) => normalize(value).toLowerCase() === identifier.toLowerCase());
     }) as Record<string, unknown> | undefined;
 
-    if (!student) return NextResponse.json({ success: false, error: 'student-not-found' }, { status: 404 });
+    if (!student) return jsonError('student-not-found', 404, 'لم يتم العثور على حساب مطابق للبيانات المدخلة.');
 
     const email = normalize(student['البريد الإلكتروني'] ?? student.email);
+    if (!email) return jsonError('student-email-missing', 400, 'لا يوجد بريد إلكتروني مسجل لهذا الحساب.');
+
+    const studentId = normalize(student['الرقم الجامعي'] ?? student.student_id ?? student.studentId ?? student.id) || identifier;
     const chatId = normalize(student.telegram_chat_id ?? student['telegram_chat_id']);
     const enabledValue = student.telegram_notifications_enabled ?? student['telegram_notifications_enabled'];
     const telegramEnabled = enabledValue === true || ['true', '1', 'yes'].includes(normalize(enabledValue).toLowerCase());
@@ -49,58 +70,71 @@ export async function POST(request: Request) {
       ...(email ? ['email' as const] : []),
     ];
 
-    if (!methods.length) return NextResponse.json({ success: false, error: 'no-recovery-method' }, { status: 400 });
-
+    if (!methods.length) return jsonError('no-recovery-method', 400, 'لا توجد وسيلة استعادة مرتبطة بهذا الحساب.');
     if (!body.method && methods.length > 1) {
       return NextResponse.json({ success: true, methods, requiresMethod: true });
     }
 
     const method = methods.includes(body.method as 'telegram' | 'email') ? body.method : methods[0];
     const code = String(randomInt(100000, 1000000));
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const studentId = normalize(student['الرقم الجامعي'] ?? student.student_id ?? student.studentId ?? student.id);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
     stage = 'save-reset-code';
-    const { error: saveError } = await supabase.from('password_reset_codes').insert([{
-      student_id: studentId,
-      code_hash: hashCode(code),
+    const { error: saveError } = await supabase.from('password_reset_requests').insert([{
+      email,
+      code,
+      created_at: new Date().toISOString(),
       expires_at: expiresAt,
-      attempts: 0,
-      used_at: null,
+      used: false,
     }]);
     if (saveError) {
-      console.error('RESET_PASSWORD_ERROR:', { stage, code: saveError.code, message: saveError.message, details: saveError.details, hint: saveError.hint });
-      const tableMissing = saveError.code === '42P01' || saveError.code === 'PGRST205' || saveError.message.toLowerCase().includes('password_reset_codes');
-      return NextResponse.json({ success: false, error: tableMissing ? 'password-reset-table-missing' : 'reset-code-save-failed' }, { status: 500 });
+      console.error('RESET_PASSWORD_ERROR:', saveError);
+      const tableMissing = saveError.code === '42P01'
+        || saveError.code === 'PGRST205'
+        || saveError.message.toLowerCase().includes('password_reset_requests');
+      return jsonError(tableMissing ? 'password-reset-table-missing' : 'reset-code-save-failed', 500, getErrorDetails(saveError));
     }
 
     const studentName = normalize(student['اسم الطالب'] ?? student.name) || 'الطالب';
-    let sent = false;
     stage = method === 'telegram' ? 'send-telegram-code' : 'send-email-code';
+
     if (method === 'telegram' && chatId) {
+      if (!process.env.TELEGRAM_BOT_TOKEN?.trim()) {
+        return jsonError('telegram-not-configured', 503, 'متغير TELEGRAM_BOT_TOKEN غير موجود في بيئة الخادم.');
+      }
+
       const message = buildStudentTelegramMessage({
         studentName,
         studentId,
         studentYear: normalize(student['السنه الدراسية'] ?? student['السنة الدراسية']) || 'غير محدد',
         studentClass: normalize(student['الفئة']) || 'غير محددة',
-        statusText: `رمز استعادة كلمة المرور الخاص بك هو: ${code}\nصالح لمدة 10 دقائق.`,
+        statusText: `رمز استعادة كلمة المرور الخاص بك هو: ${code}\nصالح لمدة 15 دقيقة.`,
         title: 'استعادة كلمة المرور',
       });
       const result = await sendTelegramNotification(message, { chatId, enabled: true });
-      sent = result?.ok === true;
-    } else if (method === 'email' && email) {
+      if (result?.ok !== true) {
+        return jsonError('telegram-send-failed', 502, result?.description ?? result?.status ?? 'تعذر إرسال الرسالة عبر التليجرام.');
+      }
+    } else if (method === 'email') {
       const result = await sendEmail({
         to: email,
         subject: 'رمز استعادة كلمة المرور',
-        html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>استعادة كلمة المرور</h2><p>مرحبًا ${studentName}،</p><p>رمز التحقق الخاص بك هو:</p><div style="font-size:30px;font-weight:800;letter-spacing:8px;color:#0f766e">${code}</div><p>الرمز صالح لمدة 10 دقائق.</p></div>`,
+        html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>استعادة كلمة المرور</h2><p>مرحبًا ${studentName}،</p><p>رمز التحقق الخاص بك هو:</p><div style="font-size:30px;font-weight:800;letter-spacing:8px;color:#0f766e">${code}</div><p>الرمز صالح لمدة 15 دقيقة.</p></div>`,
       });
-      sent = result.success;
+      if (!result.success) return jsonError('email-send-failed', 502, result.error ?? 'تعذر إرسال البريد الإلكتروني.');
+    } else {
+      return jsonError('code-send-failed', 502, 'طريقة الإرسال غير متاحة لهذا الحساب.');
     }
 
-    if (!sent) return NextResponse.json({ success: false, error: 'code-send-failed' }, { status: 502 });
-    return NextResponse.json({ success: true, method, methods, destination: method === 'email' ? maskEmail(email) : 'حساب التليجرام المرتبط' });
+    return NextResponse.json({
+      success: true,
+      method,
+      methods,
+      destination: method === 'email' ? maskEmail(email) : 'حساب التليجرام المرتبط',
+    });
   } catch (error) {
-    console.error('RESET_PASSWORD_ERROR:', { stage, error });
-    return NextResponse.json({ success: false, error: 'password-reset-request-failed' }, { status: 500 });
+    console.error('RESET_PASSWORD_ERROR:', error);
+    console.error('RESET_PASSWORD_STAGE:', stage);
+    return jsonError('password-reset-request-failed', 500, error instanceof Error ? error.message : String(error));
   }
 }
